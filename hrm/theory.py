@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from hrm.baseline import baseline_training_loss, run_baseline_pipeline, train_baseline_pipeline, BASELINE_CONFIG, RUN_PROFILE
-from hrm.memory import LongTermMemory, Planner, summarize_memory
+from hrm.distributed import DistributedCoordinator, RoleSpecialistModule, TaskGraph
+from hrm.distributed.types import CognitiveTask as DistributedTask
+from hrm.memory import LongTermMemory, MemoryQuery, MemorySystem, Planner, summarize_memory
 from hrm.perception import PerceptionPipeline
-from hrm.tools import APIConnector, SelfVerifier, ToolRegistry
-from hrm.cognition import AgentProxy, DistributedCognitionCoordinator
+from hrm.tools import APIConnector, AuditLogger, PermissionContext, PathPolicy, SelfVerifier, ToolExecutor, ToolRegistry
 from hrm.learning import LearningSystem
 
 
@@ -150,7 +152,7 @@ class HRMTheory:
             else:
                 artifact = run_baseline_pipeline(seed=seed, save_artifacts=True, output_dir=output_dir)
                 runtime_message = "Stage 1 executed the real JAX baseline pipeline."
-        except ImportError:
+        except Exception:
             artifact = {
                 "phase": "Stage 1 placeholder",
                 "candidate": "baseline_placeholder",
@@ -184,7 +186,7 @@ class HRMTheory:
         if baseline_record is None:
             try:
                 baseline_record = run_baseline_pipeline(seed=0, save_artifacts=False)
-            except ImportError as error:
+            except Exception as error:
                 baseline_record = {
                     "phase": "Stage 1 placeholder",
                     "candidate": "baseline_placeholder",
@@ -202,22 +204,45 @@ class HRMTheory:
                     "bounded_pass": False,
                 }
         output_dir = Path(output_dir)
-        memory = LongTermMemory.from_baseline_record(baseline_record)
+        memory = MemorySystem()
+        baseline_memory = LongTermMemory.from_baseline_record(baseline_record)
+        for entry in baseline_memory.entries:
+            memory.create_episode(
+                key=entry.key,
+                value=entry.content,
+                sequence_step=0,
+                source="stage2_baseline",
+                importance=0.7,
+                confidence=0.9,
+                metadata=entry.metadata,
+            )
+        semantic_consolidation = memory.consolidate()
         memory_store_path = output_dir / "stage2_memory.json"
         memory.save(memory_store_path)
-        reloaded_memory = LongTermMemory.load(memory_store_path)
-        retrieved_snapshot = reloaded_memory.retrieve(plan_query, k=3)
-        planner = Planner(reloaded_memory)
+        reloaded_memory = MemorySystem.load(memory_store_path)
+        retrieved_snapshot = reloaded_memory.retrieve(MemoryQuery(query=plan_query, limit=3), limit=3)
+        planner = Planner(baseline_memory)
         plan = planner.create_plan(plan_query)
-        memory_summary = summarize_memory(reloaded_memory)
+        memory_summary = {
+            "working_count": len(reloaded_memory.working.items),
+            "episodic_count": len(reloaded_memory.episodic.items),
+            "semantic_count": len(reloaded_memory.semantic.records),
+            "consolidations": len(reloaded_memory.semantic.consolidations),
+            "sample_memory_keys": [item.key for item in baseline_memory.entries[:5]],
+        }
+        loaded_entries = len(reloaded_memory.working.items) + len(reloaded_memory.episodic.items) + len(reloaded_memory.semantic.records)
         return {
             "phase": "Stage 2",
             "memory_summary": memory_summary,
             "memory_store_path": str(memory_store_path),
             "memory_persistence": {
                 "saved": True,
-                "loaded_entries": len(reloaded_memory.entries),
-                "retrieved_snapshot": retrieved_snapshot,
+                "loaded_entries": loaded_entries,
+                "loaded_working": len(reloaded_memory.working.items),
+                "loaded_episodic": len(reloaded_memory.episodic.items),
+                "loaded_semantic": len(reloaded_memory.semantic.records),
+                "retrieved_snapshot": [result.__dict__ for result in retrieved_snapshot],
+                "semantic_consolidation": semantic_consolidation.__dict__ if semantic_consolidation else None,
             },
             "plan": {
                 "query": plan.query,
@@ -231,6 +256,7 @@ class HRMTheory:
         baseline_record: dict[str, Any] | None = None,
         api_endpoint: str = "status",
         api_payload: dict[str, Any] | None = None,
+        output_dir: Path | str = "hrm_baseline_outputs",
     ) -> dict[str, Any]:
         if baseline_record is None:
             try:
@@ -257,15 +283,28 @@ class HRMTheory:
         registry.register_builtin_tools()
 
         api_payload = api_payload or {"health": True}
-        api_connector = APIConnector("default_connector", base_url="https://api.placeholder.local")
+        api_connector = APIConnector(base_url="https://api.placeholder.local")
         verifier = SelfVerifier(registry, api_connector)
+
+        policy = PathPolicy(read_roots=[Path(output_dir).resolve(), Path.cwd().resolve()], write_roots=[Path(output_dir).resolve(), Path.cwd().resolve()])
+        audit_log = AuditLogger(Path(output_dir) / "stage3_tool_audit.log")
+        tool_executor = ToolExecutor(registry, policy, audit_log)
+        permission_context = PermissionContext(
+            principal_id="stage3_agent",
+            granted_permissions=frozenset({"tool.read", "tool.write", "tool.execute", "tool.network", "tool.delete"}),
+            allowed_directories=(Path(output_dir).resolve(), Path.cwd().resolve()),
+            allowed_hosts=("localhost", "127.0.0.1", "api.placeholder.local"),
+            session_id="stage3_session",
+            expires_at=time.time() + 3600,
+            valid=True,
+        )
 
         api_request = {"endpoint": api_endpoint, "payload": api_payload}
         try:
-            api_response = api_connector.call(api_endpoint, api_payload)
-        except ValueError as error:
+            api_response = api_connector.call("POST", api_endpoint, headers={"Content-Type": "application/json"}, body=api_payload, permission_context=permission_context)
+        except Exception as error:
             api_response = {
-                "connector": api_connector.name,
+                "connector": api_connector.allowed_hosts,
                 "endpoint": api_endpoint,
                 "status": "error",
                 "payload": api_payload,
@@ -273,13 +312,20 @@ class HRMTheory:
             }
 
         tool_inputs = {
-            "echo": "hello stage 3",
-            "sum": "2, 3, 5",
-            "python": "result = 1 + 2",
-            "api_call": json.dumps(api_request),
+            "list_directory": json.dumps({"path": str(Path.cwd())}),
+            "read_file": json.dumps({"path": str(Path(__file__).resolve())}),
+            "execute_code": json.dumps({"code": "print(1 + 2)", "timeout_seconds": 2}),
+            "api_request": json.dumps({"method": "GET", "url": "status", "headers": {}, "body": {"health": True}}),
         }
 
-        tool_results = {name: registry.run(name, data) for name, data in tool_inputs.items()}
+        tool_results = {}
+        for name, data in tool_inputs.items():
+            try:
+                arguments = json.loads(data)
+            except Exception:
+                arguments = {"input": data}
+            tool_results[name] = tool_executor.invoke(name, arguments, permission_context)
+
         verification = verifier.self_check()
         api_verification = verifier.verify_api_connector(api_endpoint, api_payload)
         return {
@@ -360,12 +406,21 @@ class HRMTheory:
 
         memory = LongTermMemory.from_baseline_record(baseline_record)
         agent_roles = agent_roles or ["safety", "efficiency", "planning", "recovery"]
-        agents = [
-            AgentProxy(f"agent_{role}", role, memory)
-            for role in agent_roles
-        ]
-        coordinator = DistributedCognitionCoordinator(agents)
-        coordination = coordinator.coordinate(consensus_query)
+        modules = [RoleSpecialistModule(role, memory) for role in agent_roles]
+
+        main_task = DistributedTask.create(
+            objective=consensus_query,
+            inputs={"memory_reads": ["baseline_summary"], "memory_writes": ["stage5_consensus"]},
+            required_capabilities=frozenset(agent_roles),
+            dependencies=(),
+            priority=80,
+            deadline=None,
+            retry_limit=1,
+            metadata={"stage": 5, "query": consensus_query},
+        )
+        task_graph = TaskGraph([main_task])
+        coordinator = DistributedCoordinator(task_graph, modules)
+        coordination = coordinator.run()
         memory_summary = summarize_memory(memory)
         return {
             "phase": "Stage 5",
