@@ -26,3 +26,13 @@ def test_runner_stage4_and_stage5_smoke() -> None:
     )
     assert "Distributed cognition" in result5.stdout
     assert result5.returncode == 0
+
+    result6 = subprocess.run(
+        ["python3", "hrm/runner.py", "--stage", "6", "--starting-preferences", '{"exploration": 0.1, "safety": 0.4, "efficiency": 0.4, "bias": 0.1}'],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Learning systems" in result6.stdout
+    assert result6.returncode == 0

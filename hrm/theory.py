@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from hrm.baseline import execute_config, run_baseline_pipeline, BASELINE_CONFIG, RUN_PROFILE
+from hrm.baseline import run_baseline_pipeline, BASELINE_CONFIG, RUN_PROFILE
 from hrm.memory import LongTermMemory, Planner, summarize_memory
 from hrm.perception import PerceptionPipeline
 from hrm.tools import APIConnector, SelfVerifier, ToolRegistry
@@ -222,15 +222,28 @@ class HRMTheory:
 
         registry = ToolRegistry()
         registry.register_builtin_tools()
-        api_connector = APIConnector("default_connector")
-        verifier = SelfVerifier(registry, api_connector)
 
         api_payload = api_payload or {"health": True}
+        api_connector = APIConnector("default_connector", base_url="https://api.placeholder.local")
+        verifier = SelfVerifier(registry, api_connector)
+
+        api_request = {"endpoint": api_endpoint, "payload": api_payload}
+        try:
+            api_response = api_connector.call(api_endpoint, api_payload)
+        except ValueError as error:
+            api_response = {
+                "connector": api_connector.name,
+                "endpoint": api_endpoint,
+                "status": "error",
+                "payload": api_payload,
+                "summary": str(error),
+            }
+
         tool_inputs = {
             "echo": "hello stage 3",
             "sum": "2, 3, 5",
             "python": "result = 1 + 2",
-            "api_call": json.dumps({"endpoint": api_endpoint, "payload": api_payload}),
+            "api_call": json.dumps(api_request),
         }
 
         tool_results = {name: registry.run(name, data) for name, data in tool_inputs.items()}
@@ -253,6 +266,8 @@ class HRMTheory:
                 for name, result in tool_results.items()
             },
             "verification": verification,
+            "api_request": api_request,
+            "api_response": api_response,
             "api_verification": api_verification,
         }
 
@@ -265,6 +280,12 @@ class HRMTheory:
         sample_inputs = pipeline.sample_inputs()
         modalities = include_modalities or ["text", "image", "audio", "video"]
         selected_inputs = {k: sample_inputs[k] for k in modalities if k in sample_inputs}
+        if not selected_inputs:
+            raise ValueError("No valid modalities were provided to Stage 4.")
+
+        if "text" in selected_inputs:
+            selected_inputs["text"] = f"{modality_query.strip()} {selected_inputs['text']}"
+
         integrated = pipeline.integrate(selected_inputs)
         readiness = integrated["overall_readiness"]
         return {
@@ -274,6 +295,7 @@ class HRMTheory:
             "readiness": readiness,
             "integrated_outputs": integrated["outputs"],
             "combined_embedding_summary": f"{len(integrated['combined_embedding'])} dims",
+            "query_influence": f"Text query appended for {modality_query.strip()[:50]}",
         }
 
     def _run_stage_5(

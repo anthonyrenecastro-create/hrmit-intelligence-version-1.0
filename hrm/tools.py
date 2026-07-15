@@ -6,6 +6,16 @@ import traceback
 from dataclasses import dataclass
 from typing import Any, Callable
 
+try:
+    import httpx  # type: ignore
+except ImportError:
+    httpx = None
+
+try:
+    import jsonschema  # type: ignore
+except ImportError:
+    jsonschema = None
+
 
 @dataclass(frozen=True)
 class ToolResult:
@@ -99,19 +109,102 @@ class ToolRegistry:
 
 
 class APIConnector:
+    REQUEST_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "endpoint": {"type": "string"},
+            "payload": {"type": "object"},
+        },
+        "required": ["endpoint", "payload"],
+        "additionalProperties": False,
+    }
+
+    RESPONSE_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "connector": {"type": "string"},
+            "endpoint": {"type": "string"},
+            "status": {"type": "string", "enum": ["ok", "error"]},
+            "payload": {"type": "object"},
+            "summary": {"type": "string"},
+        },
+        "required": ["connector", "endpoint", "status", "payload", "summary"],
+        "additionalProperties": True,
+    }
+
     def __init__(self, name: str, base_url: str = "https://api.placeholder.local") -> None:
         self.name = name
         self.base_url = base_url
 
+    def _validate_request(self, request_obj: dict[str, Any]) -> bool:
+        if jsonschema is None:
+            return True
+        try:
+            jsonschema.validate(instance=request_obj, schema=self.REQUEST_SCHEMA)
+            return True
+        except Exception:
+            return False
+
+    def _validate_response(self, response_obj: dict[str, Any]) -> bool:
+        if jsonschema is None:
+            return True
+        try:
+            jsonschema.validate(instance=response_obj, schema=self.RESPONSE_SCHEMA)
+            return True
+        except Exception:
+            return False
+
     def call(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "connector": self.name,
-            "endpoint": endpoint,
-            "base_url": self.base_url,
-            "payload": payload,
-            "status": "ok",
-            "summary": "External API connector stub response",
-        }
+        request_obj = {"endpoint": endpoint, "payload": payload}
+        if not self._validate_request(request_obj):
+            raise ValueError("API request payload does not match the expected schema")
+
+        allow_http = (
+            httpx is not None
+            and isinstance(self.base_url, str)
+            and self.base_url.startswith("http")
+            and "placeholder.local" not in self.base_url
+        )
+        if allow_http:
+            try:
+                response = httpx.post(
+                    f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}",
+                    json=payload,
+                    timeout=5.0,
+                )
+                response_json = response.json()
+                if not isinstance(response_json, dict):
+                    response_json = {
+                        "connector": self.name,
+                        "endpoint": endpoint,
+                        "status": "error",
+                        "payload": {},
+                        "summary": "Invalid HTTP response body",
+                    }
+            except Exception as exc:
+                response_json = {
+                    "connector": self.name,
+                    "endpoint": endpoint,
+                    "status": "error",
+                    "payload": {},
+                    "summary": "HTTP request failed",
+                    "error": str(exc),
+                }
+        else:
+            response_json = {
+                "connector": self.name,
+                "endpoint": endpoint,
+                "base_url": self.base_url,
+                "payload": payload,
+                "status": "ok",
+                "summary": "External API connector stub response",
+            }
+
+        if not self._validate_response(response_json):
+            response_json["status"] = "error"
+            response_json["summary"] = "Response schema validation failed"
+
+        return response_json
 
 
 class SelfVerifier:
@@ -132,12 +225,14 @@ class SelfVerifier:
 
     def verify_api_connector(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = self.api_connector.call(endpoint, payload)
-        valid = response.get("status") == "ok"
+        response_schema_valid = self.api_connector._validate_response(response)
+        valid = response.get("status") == "ok" and response_schema_valid
         return {
             "connector": self.api_connector.name,
             "endpoint": endpoint,
             "payload": payload,
             "response": response,
+            "response_schema_valid": response_schema_valid,
             "verified": valid,
         }
 
