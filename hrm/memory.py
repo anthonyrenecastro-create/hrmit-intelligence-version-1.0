@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -90,6 +92,43 @@ class LongTermMemory:
             f"Baseline run summary for phase={baseline_record.get('phase')} candidate={baseline_record.get('candidate')} with final L_total={baseline_record.get('L_total')}",
             {"summary": True},
         )
+        return memory
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dim": self.dim,
+            "entries": [
+                {
+                    "key": entry.key,
+                    "content": entry.content,
+                    "metadata": entry.metadata,
+                    "embedding": entry.embedding.tolist(),
+                }
+                for entry in self.entries
+            ],
+        }
+
+    def save(self, path: Path | str) -> Path:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        return path
+
+    @classmethod
+    def load(cls, path: Path | str) -> "LongTermMemory":
+        path = Path(path)
+        content = json.loads(path.read_text(encoding="utf-8"))
+        memory = cls(dim=content.get("dim", 32))
+        for entry_data in content.get("entries", []):
+            embedding = np.asarray(entry_data.get("embedding", []), dtype=np.float32)
+            memory.entries.append(
+                MemoryEntry(
+                    key=entry_data["key"],
+                    content=entry_data["content"],
+                    metadata=entry_data.get("metadata", {}),
+                    embedding=embedding,
+                )
+            )
         return memory
 
 

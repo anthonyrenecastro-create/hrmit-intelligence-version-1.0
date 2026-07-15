@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from hrm.baseline import run_baseline_pipeline, BASELINE_CONFIG, RUN_PROFILE
+from hrm.baseline import baseline_training_loss, run_baseline_pipeline, train_baseline_pipeline, BASELINE_CONFIG, RUN_PROFILE
 from hrm.memory import LongTermMemory, Planner, summarize_memory
 from hrm.perception import PerceptionPipeline
 from hrm.tools import APIConnector, SelfVerifier, ToolRegistry
@@ -87,9 +87,9 @@ class HRMTheory:
             HRMStage(
                 6,
                 "Learning systems",
-                "Support continual adaptation, preference optimization, and memory refinement.",
+                "Support continual controlled heuristic adaptation, preference optimization, and memory refinement.",
                 (
-                    "Capture learning signals",
+                    "Capture adaptation signals",
                     "Update preference model",
                     "Refine long-term memory",
                     "Adjust reasoning parameters",
@@ -127,12 +127,29 @@ class HRMTheory:
             results.append(self.run_stage(stage.index))
         return results
 
-    def _run_stage_1(self, seed: int = 0, output_dir: Path | str = "hrm_baseline_outputs") -> dict[str, Any]:
+    def _run_stage_1(
+        self,
+        seed: int = 0,
+        output_dir: Path | str = "hrm_baseline_outputs",
+        train: bool = False,
+        train_epochs: int = 3,
+        train_learning_rate: float = 0.02,
+    ) -> dict[str, Any]:
         output_dir = Path(output_dir)
         runtime_message = ""
         try:
-            artifact = run_baseline_pipeline(seed=seed, save_artifacts=True, output_dir=output_dir)
-            runtime_message = "Stage 1 executed the real JAX baseline pipeline."
+            if train:
+                artifact = train_baseline_pipeline(
+                    seed=seed,
+                    epochs=train_epochs,
+                    learning_rate=train_learning_rate,
+                    save_artifacts=True,
+                    output_dir=output_dir,
+                )
+                runtime_message = "Stage 1 executed the JAX baseline training pipeline."
+            else:
+                artifact = run_baseline_pipeline(seed=seed, save_artifacts=True, output_dir=output_dir)
+                runtime_message = "Stage 1 executed the real JAX baseline pipeline."
         except ImportError:
             artifact = {
                 "phase": "Stage 1 placeholder",
@@ -142,7 +159,7 @@ class HRMTheory:
                 "backend": "cpu",
                 "profile": RUN_PROFILE,
                 "steps": BASELINE_CONFIG.steps,
-                "batch": PROFILE["batch"],
+                "batch": BASELINE_CONFIG.shape.batch,
                 "perturb_step": BASELINE_CONFIG.perturb_step,
                 "perturb_strength": BASELINE_CONFIG.perturb_strength,
                 "L_total": 0.0,
@@ -158,7 +175,12 @@ class HRMTheory:
             "runtime_message": runtime_message,
         }
 
-    def _run_stage_2(self, baseline_record: dict[str, Any] | None = None, plan_query: str = "Improve HRM safety and recovery") -> dict[str, Any]:
+    def _run_stage_2(
+        self,
+        baseline_record: dict[str, Any] | None = None,
+        plan_query: str = "Improve HRM safety and recovery",
+        output_dir: Path | str = "hrm_baseline_outputs",
+    ) -> dict[str, Any]:
         if baseline_record is None:
             try:
                 baseline_record = run_baseline_pipeline(seed=0, save_artifacts=False)
@@ -179,13 +201,24 @@ class HRMTheory:
                     "ledger_pass": False,
                     "bounded_pass": False,
                 }
+        output_dir = Path(output_dir)
         memory = LongTermMemory.from_baseline_record(baseline_record)
-        planner = Planner(memory)
+        memory_store_path = output_dir / "stage2_memory.json"
+        memory.save(memory_store_path)
+        reloaded_memory = LongTermMemory.load(memory_store_path)
+        retrieved_snapshot = reloaded_memory.retrieve(plan_query, k=3)
+        planner = Planner(reloaded_memory)
         plan = planner.create_plan(plan_query)
-        memory_summary = summarize_memory(memory)
+        memory_summary = summarize_memory(reloaded_memory)
         return {
             "phase": "Stage 2",
             "memory_summary": memory_summary,
+            "memory_store_path": str(memory_store_path),
+            "memory_persistence": {
+                "saved": True,
+                "loaded_entries": len(reloaded_memory.entries),
+                "retrieved_snapshot": retrieved_snapshot,
+            },
             "plan": {
                 "query": plan.query,
                 "steps": plan.steps,
@@ -371,14 +404,15 @@ class HRMTheory:
 
         memory = LongTermMemory.from_baseline_record(baseline_record)
         learner = LearningSystem(memory)
-        result = learner.update(baseline_record, starting_preferences=starting_preferences, learning_rate=learning_rate)
+        learning_result = learner.update(baseline_record, starting_preferences=starting_preferences, learning_rate=learning_rate)
         memory_summary = summarize_memory(memory)
         return {
             "phase": "Stage 6",
             "learning_rate": learning_rate,
             "starting_preferences": starting_preferences or {"exploration": 0.2, "safety": 0.3, "efficiency": 0.5, "bias": 0.0},
             "memory_summary": memory_summary,
-            "learning_result": result,
+            "adaptation_mode": learning_result.get("adaptation_mode", "controlled_heuristic"),
+            "learning_result": learning_result,
         }
 
     def _run_placeholder_stage(self, stage: HRMStage, **kwargs: Any) -> dict[str, Any]:

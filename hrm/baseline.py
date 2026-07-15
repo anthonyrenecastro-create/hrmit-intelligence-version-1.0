@@ -286,7 +286,7 @@ def make_initial_state(key: jax.Array, shape: ShapeConfig) -> State:
     return State(phi, memory, cognition, hierarchy, allocation)
 
 
-def make_inputs(key: jax.Array, cfg: ExperimentConfig) -> Inputs:
+def make_inputs(key: jax.Array, cfg: ExperimentConfig, perturb_strength: jax.Array | float | None = None) -> Inputs:
     shape = cfg.shape
     noise_key, perturb_key = random.split(key)
     yy = jnp.linspace(-1.0, 1.0, shape.height, dtype=jnp.float32)
@@ -310,16 +310,23 @@ def make_inputs(key: jax.Array, cfg: ExperimentConfig) -> Inputs:
     noise = 0.35 * random.normal(noise_key, target.shape, dtype=jnp.float32)
     drive = target + noise
 
+    perturb_strength_value = jnp.asarray(cfg.perturb_strength, dtype=jnp.float32) if perturb_strength is None else jnp.asarray(perturb_strength, dtype=jnp.float32)
     perturb = jnp.zeros_like(target)
-    damage = cfg.perturb_strength * random.normal(perturb_key, (shape.batch, shape.height, shape.width, shape.channels), dtype=jnp.float32)
+    damage = perturb_strength_value * random.normal(perturb_key, (shape.batch, shape.height, shape.width, shape.channels), dtype=jnp.float32)
     perturb = perturb.at[cfg.perturb_step].set(damage)
     return Inputs(drive=drive, target=target, perturb=perturb)
 
 
-def seeded_components(seed: int, cfg: ExperimentConfig) -> tuple[Params, State, Inputs]:
+def seeded_components(seed: int, cfg: ExperimentConfig, perturb_strength: jax.Array | float | None = None) -> tuple[Params, State, Inputs]:
     root = random.PRNGKey(seed)
     pkey, skey, ikey = random.split(root, 3)
-    return make_params(pkey, cfg.shape), make_initial_state(skey, cfg.shape), make_inputs(ikey, cfg)
+    return make_params(pkey, cfg.shape), make_initial_state(skey, cfg.shape), make_inputs(ikey, cfg, perturb_strength=perturb_strength)
+
+
+def seeded_state_inputs(seed: int, cfg: ExperimentConfig, perturb_strength: jax.Array | float | None = None) -> tuple[State, Inputs]:
+    root = random.PRNGKey(seed)
+    skey, ikey = random.split(root, 2)
+    return make_initial_state(skey, cfg.shape), make_inputs(ikey, cfg, perturb_strength=perturb_strength)
 
 
 def hrm_step(state: State, inp: tuple[jax.Array, jax.Array, jax.Array], params: Params, dyn: Dynamics, shape: ShapeConfig, ablation: Ablation) -> tuple[State, StepLedger]:
@@ -401,6 +408,74 @@ if jax is not None:
 else:
     def run_hrm(*args, **kwargs):
         raise ImportError("JAX is required to execute the HRM recurrent model. Install jax to run baseline functions.")
+
+
+def execute_config_with_params(phase: str, candidate: str, cfg: ExperimentConfig, params: Params, seed: int = 0, keep_artifact: bool = False) -> dict[str, float | int | str | bool]:
+    cfg.validate()
+    initial, inputs = seeded_state_inputs(seed, cfg, perturb_strength=cfg.perturb_strength)
+    t0 = time.perf_counter()
+    final_state, ledger = run_hrm(initial, inputs, params, cfg.dynamics(), cfg.shape, FULL)
+    block_until_ready((final_state, ledger))
+    elapsed = time.perf_counter() - t0
+    metrics = score_ledger(ledger, final_state, cfg)
+
+    record = {
+        "phase": phase,
+        "candidate": candidate,
+        "run_id": cfg.run_id(seed=seed, tag=phase.lower().replace(" ", "_")),
+        "config_hash": cfg.config_hash(),
+        "seed": seed,
+        "backend": BACKEND,
+        "profile": RUN_PROFILE,
+        "steps": cfg.steps,
+        "batch": cfg.shape.batch,
+        "perturb_step": cfg.perturb_step,
+        "perturb_strength": cfg.perturb_strength,
+        "elapsed_seconds": elapsed,
+        **metrics,
+        **{f"mechanism_{k}": v for k, v in mechanism_means(ledger).items()},
+    }
+    if keep_artifact:
+        RUN_ARTIFACTS[(phase, candidate, seed)] = (cfg, final_state, ledger)
+    return record
+
+
+class SimpleRecurrentParams(NamedTuple):
+    W_input: jax.Array
+    W_hidden: jax.Array
+    W_output: jax.Array
+
+
+def make_simple_recurrent_params(key: jax.Array, shape: ShapeConfig) -> SimpleRecurrentParams:
+    k1, k2, k3 = random.split(key, 3)
+    return SimpleRecurrentParams(
+        W_input=random.normal(k1, (shape.channels, shape.cognitive_dim), dtype=jnp.float32) / jnp.sqrt(shape.channels),
+        W_hidden=random.normal(k2, (shape.cognitive_dim, shape.cognitive_dim), dtype=jnp.float32) / jnp.sqrt(shape.cognitive_dim),
+        W_output=random.normal(k3, (shape.cognitive_dim, shape.channels), dtype=jnp.float32) / jnp.sqrt(shape.cognitive_dim),
+    )
+
+
+def run_simple_recurrent_baseline(hidden: jax.Array, inputs: Inputs, params: SimpleRecurrentParams, cfg: ExperimentConfig) -> jax.Array:
+    def baseline_step(hidden_state: jax.Array, inp: tuple[jax.Array, jax.Array, jax.Array]):
+        drive_t, target_t, _ = inp
+        drive_embed = jnp.mean(drive_t, axis=(1, 2, 3))
+        hidden_state = jnp.tanh(jnp.einsum("bd,df->bf", drive_embed, params.W_input) + hidden_state @ params.W_hidden)
+        output = hidden_state @ params.W_output
+        prediction = jnp.tile(output[:, None, None, :], (1, cfg.shape.height, cfg.shape.width, 1))
+        mse = jnp.mean((prediction - target_t) ** 2, axis=(1, 2, 3))
+        return hidden_state, mse
+
+    _, mse_history = lax.scan(baseline_step, hidden, (inputs.drive, inputs.target, inputs.perturb))
+    return jnp.mean(mse_history)
+
+
+def evaluate_non_hrm_baseline(cfg: ExperimentConfig, seed: int = 0) -> float:
+    key = random.PRNGKey(seed)
+    hidden_key, param_key = random.split(key)
+    initial_hidden = 0.01 * random.normal(hidden_key, (cfg.shape.batch, cfg.shape.cognitive_dim), dtype=jnp.float32)
+    baseline_params = make_simple_recurrent_params(param_key, cfg.shape)
+    _, inputs = seeded_state_inputs(seed, cfg, perturb_strength=cfg.perturb_strength)
+    return float(np.asarray(run_simple_recurrent_baseline(initial_hidden, inputs, baseline_params, cfg)))
 
 
 def block_until_ready(tree):
@@ -517,6 +592,72 @@ def execute_config(phase: str, candidate: str, cfg: ExperimentConfig, seed: int 
     ALL_RECORDS.append(record)
     if keep_artifact:
         RUN_ARTIFACTS[(phase, candidate, seed)] = (cfg, final_state, ledger)
+    return record
+
+
+def baseline_training_loss(ledger: StepLedger) -> jax.Array:
+    return jnp.mean(ledger.prediction_mse) + 0.1 * jnp.mean(ledger.ledger_relative_error)
+
+
+def train_baseline_pipeline(
+    seed: int = 0,
+    epochs: int = 3,
+    learning_rate: float = 0.02,
+    save_artifacts: bool = False,
+    output_dir: Path = OUTPUT_DIR,
+) -> dict[str, float | int | str | bool]:
+    require_jax()
+    reset_run_history()
+    output_dir = ensure_output_dir(output_dir)
+
+    cfg = BASELINE_CONFIG
+    params, _, _ = seeded_components(seed, cfg, perturb_strength=cfg.perturb_strength)
+    train_seeds = [seed, seed + 1]
+    validation_seeds = [seed + 10, seed + 11]
+
+    def hrm_loss_for_params(params: Params, seed_value: int) -> jax.Array:
+        initial, inputs = seeded_state_inputs(seed_value, cfg, perturb_strength=cfg.perturb_strength)
+        _, ledger = run_hrm(initial, inputs, params, cfg.dynamics(), cfg.shape, FULL)
+        return baseline_training_loss(ledger)
+
+    def training_loss(params: Params) -> jax.Array:
+        losses = jnp.stack([hrm_loss_for_params(params, s) for s in train_seeds])
+        return jnp.mean(losses)
+
+    def validation_loss(params: Params) -> float:
+        losses = [float(np.asarray(hrm_loss_for_params(params, s))) for s in validation_seeds]
+        return float(np.mean(losses))
+
+    initial_validation_loss = validation_loss(params)
+    baseline_comparison_loss = float(np.mean([evaluate_non_hrm_baseline(cfg, s) for s in validation_seeds]))
+
+    grad_fn = jax.grad(training_loss)
+    history: list[dict[str, float]] = []
+    for epoch in range(epochs):
+        current_train_loss = float(np.asarray(training_loss(params)))
+        grads = grad_fn(params)
+        params = jax.tree_util.tree_map(lambda p, g: p - jnp.asarray(learning_rate, dtype=jnp.float32) * g, params, grads)
+        current_validation_loss = validation_loss(params)
+        history.append({
+            "epoch": int(epoch),
+            "training_loss": current_train_loss,
+            "validation_loss": current_validation_loss,
+        })
+
+    final_validation_loss = validation_loss(params)
+    validation_improvement = initial_validation_loss - final_validation_loss
+    record = execute_config_with_params("Stage 1 baseline training", "trained_baseline", cfg, params, seed=seed, keep_artifact=True)
+    if save_artifacts:
+        save_records(output_dir)
+
+    record["training_history"] = history
+    record["validation_loss_before"] = float(initial_validation_loss)
+    record["validation_loss_after"] = float(final_validation_loss)
+    record["validation_improvement"] = float(validation_improvement)
+    record["non_hrm_baseline_loss"] = float(baseline_comparison_loss)
+    record["hrm_vs_non_hrm"] = float(final_validation_loss) < float(baseline_comparison_loss)
+    record["training_epochs"] = epochs
+    record["training_learning_rate"] = learning_rate
     return record
 
 

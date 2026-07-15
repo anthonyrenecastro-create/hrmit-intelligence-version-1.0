@@ -208,19 +208,51 @@ class APIConnector:
 
 
 class SelfVerifier:
+    TOOL_RESULT_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "tool_name": {"type": "string"},
+            "success": {"type": "boolean"},
+            "output": {"type": "string"},
+            "error": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        },
+        "required": ["tool_name", "success", "output", "error"],
+        "additionalProperties": False,
+    }
+
     def __init__(self, tools: ToolRegistry, api_connector: APIConnector) -> None:
         self.tools = tools
         self.api_connector = api_connector
 
+    def _validate_tool_result(self, result: ToolResult) -> bool:
+        if jsonschema is None:
+            return True
+        try:
+            jsonschema.validate(
+                instance={
+                    "tool_name": result.tool_name,
+                    "success": result.success,
+                    "output": result.output,
+                    "error": result.error,
+                },
+                schema=self.TOOL_RESULT_SCHEMA,
+            )
+            return True
+        except Exception:
+            return False
+
     def verify_tool(self, tool_name: str, input_data: str, expected_contains: str) -> dict[str, Any]:
         result = self.tools.run(tool_name, input_data)
+        schema_valid = self._validate_tool_result(result)
+        verified = result.success and expected_contains in result.output and schema_valid
         return {
             "tool_name": tool_name,
             "success": result.success,
             "output": result.output,
             "error": result.error,
+            "schema_valid": schema_valid,
             "expected_contains": expected_contains,
-            "verified": result.success and expected_contains in result.output,
+            "verified": verified,
         }
 
     def verify_api_connector(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -247,4 +279,5 @@ class SelfVerifier:
             "tool_verification": results,
             "api_verification": api_result,
             "overall_verified": all(item["verified"] for item in results) and api_result["verified"],
+            "schema_valid": all(item["schema_valid"] for item in results),
         }

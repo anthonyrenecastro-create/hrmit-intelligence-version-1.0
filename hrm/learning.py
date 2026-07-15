@@ -34,18 +34,23 @@ class LearningSystem:
             "signal_strength": signal_strength,
         }
 
-    def refine_preferences(self, current_preferences: dict[str, float], learning_rate: float = 0.01) -> PreferenceModel:
-        updated = {k: float(v) * (1.0 + learning_rate) for k, v in current_preferences.items()}
-        updated["bias"] = float(current_preferences.get("bias", 0.0)) + learning_rate
-        self.preference_model = PreferenceModel(weights={k: updated[k] for k in updated if k != "bias"}, bias=updated["bias"])
+    def adapt_preferences(self, current_preferences: dict[str, float], adaptation_rate: float = 0.01) -> PreferenceModel:
+        adjusted = {}
+        for k, v in current_preferences.items():
+            if k == "bias":
+                continue
+            adjusted[k] = float(v) * (1.0 + adaptation_rate)
+
+        bias_value = float(current_preferences.get("bias", 0.0)) + adaptation_rate
+        self.preference_model = PreferenceModel(weights=adjusted, bias=bias_value)
         return self.preference_model
 
-    def refine_memory(self, learning_signals: dict[str, Any]) -> None:
+    def record_adaptation_signal(self, learning_signals: dict[str, Any]) -> None:
         if learning_signals["signal_strength"] > 0.0:
             self.memory.add_entry(
-                "learning_signal",
-                f"Captured learning signal with strength {learning_signals['signal_strength']}",
-                {"type": "learning", "strength": learning_signals["signal_strength"]},
+                "adaptation_signal",
+                f"Captured adaptation signal with strength {learning_signals['signal_strength']}",
+                {"type": "heuristic_adaptation", "strength": learning_signals["signal_strength"]},
             )
 
     def compute_adaptation_metrics(self, baseline_record: dict[str, Any], preference_model: PreferenceModel) -> LearningMetrics:
@@ -63,11 +68,12 @@ class LearningSystem:
     def update(self, baseline_record: dict[str, Any], starting_preferences: dict[str, float] | None = None, learning_rate: float = 0.05) -> dict[str, Any]:
         starting_preferences = starting_preferences or {"exploration": 0.2, "safety": 0.3, "efficiency": 0.5, "bias": 0.0}
         signals = self.capture_signals(baseline_record)
-        self.refine_memory(signals)
-        preference_model = self.refine_preferences(starting_preferences, learning_rate=learning_rate)
+        self.record_adaptation_signal(signals)
+        preference_model = self.adapt_preferences(starting_preferences, adaptation_rate=learning_rate)
         metrics = self.compute_adaptation_metrics(baseline_record, preference_model)
         return {
             "signals": signals,
+            "adaptation_mode": "controlled_heuristic",
             "preference_model": {
                 "weights": preference_model.weights,
                 "bias": preference_model.bias,

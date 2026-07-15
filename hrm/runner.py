@@ -18,6 +18,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage", type=int, default=1, help="Stage number to run (1-6)")
     parser.add_argument("--output", type=Path, default=Path("hrm_baseline_outputs"), help="Output directory for stage artifacts")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for the Stage 1 baseline run")
+    parser.add_argument("--train", action="store_true", help="Run Stage 1 in training mode")
+    parser.add_argument("--train-epochs", type=int, default=3, help="Number of epochs for Stage 1 training")
+    parser.add_argument("--train-learning-rate", type=float, default=0.02, help="Learning rate for Stage 1 training")
     parser.add_argument("--plan-query", type=str, default="Improve HRM safety and recovery", help="Query for Stage 2 planning")
     parser.add_argument("--api-endpoint", type=str, default="status", help="Endpoint name for Stage 3 API verification")
     parser.add_argument("--api-payload", type=str, default='{"health": true}', help="JSON payload for Stage 3 API verification")
@@ -34,9 +37,21 @@ def main() -> None:
     args = parse_args()
     theory = HRMTheory()
     if args.stage == 1:
-        result = theory.run_stage(1, seed=args.seed, output_dir=args.output)
+        result = theory.run_stage(
+            1,
+            seed=args.seed,
+            output_dir=args.output,
+            train=args.train,
+            train_epochs=args.train_epochs,
+            train_learning_rate=args.train_learning_rate,
+        )
     elif args.stage == 2:
-        result = theory.run_stage(2, baseline_record=None, plan_query=args.plan_query)
+        result = theory.run_stage(
+            2,
+            baseline_record=None,
+            plan_query=args.plan_query,
+            output_dir=args.output,
+        )
     elif args.stage == 3:
         result = theory.run_stage(
             3,
