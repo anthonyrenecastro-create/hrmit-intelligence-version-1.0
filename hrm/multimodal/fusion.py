@@ -2,38 +2,77 @@ from __future__ import annotations
 
 import numpy as np
 
-from .types import FusionResult, ModalityRepresentation
+from hrm.multimodal.types import FusionResult, ModalityRepresentation
 
 
-class ConfidenceFusion:
-    def __init__(self, expected_modalities: tuple[str, ...] = ("vision", "audio", "structured"), contradiction_threshold: float = -0.25) -> None:
-        self.expected_modalities = expected_modalities
-        self.contradiction_threshold = contradiction_threshold
+class FusionEngine:
+    def __init__(self, strategy: str = "confidence_weighted") -> None:
+        self.strategy = strategy
 
     def fuse(self, representations: list[ModalityRepresentation]) -> FusionResult:
-        if not representations:
-            raise ValueError("At least one representation is required")
-        dimensions = {item.latent.shape for item in representations}
-        if len(dimensions) != 1:
-            raise ValueError("All modality latents must have the same shape")
-        raw = np.asarray([max(0.0, item.confidence) for item in representations], np.float32)
-        weights = raw / raw.sum() if raw.sum() else np.full_like(raw, 1.0 / len(raw))
-        fused = sum(float(weight) * item.latent for weight, item in zip(weights, representations))
-        contradictions = []
-        for i, left in enumerate(representations):
-            for right in representations[i + 1:]:
-                denom = np.linalg.norm(left.latent) * np.linalg.norm(right.latent) + 1e-9
-                similarity = float(np.dot(left.latent, right.latent) / denom)
-                if similarity < self.contradiction_threshold:
-                    contradictions.append({"left": left.modality, "right": right.modality,
-                                           "cosine_similarity": similarity})
-        modalities = {item.modality for item in representations}
+        modalities = [rep.modality for rep in representations]
+        confidences = {rep.modality: float(rep.confidence) for rep in representations}
+        weights = self._compute_weights(representations)
+        fused = self._weighted_sum(representations, weights)
+        missing = tuple()
+        contradictions = self._detect_contradictions(representations)
+        provenance = tuple(f"{rep.modality}:{rep.source_id}" for rep in representations)
+        diagnostics = {
+            "strategy": self.strategy,
+            "latent_norms": {rep.modality: float(np.linalg.norm(rep.latent)) for rep in representations},
+            "projected_modalities": modalities,
+            "weight_sum": float(sum(weights.values())),
+            "contradictions": contradictions,
+        }
         return FusionResult(
-            fused.astype(np.float32),
-            {item.modality: float(weight) for item, weight in zip(representations, weights)},
-            {item.modality: float(item.confidence) for item in representations},
-            tuple(name for name in self.expected_modalities if name not in modalities),
-            tuple(contradictions), tuple(item.source_id for item in representations),
-            {"method": "confidence_weighted_sum", "latent_dim": int(fused.size),
-             "weight_sum": float(weights.sum())},
+            fused_latent=fused,
+            modality_weights=weights,
+            modality_confidences=confidences,
+            missing_modalities=missing,
+            contradictions=tuple(contradictions),
+            provenance=provenance,
+            diagnostics=diagnostics,
         )
+
+    def _compute_weights(self, representations: list[ModalityRepresentation]) -> dict[str, float]:
+        if not representations:
+            return {}
+        if self.strategy == "confidence_weighted":
+            total_confidence = sum(max(rep.confidence, 0.0) for rep in representations)
+            if total_confidence > 0:
+                return {rep.modality: float(rep.confidence / total_confidence) for rep in representations}
+            return {rep.modality: 1.0 / len(representations) for rep in representations}
+        if self.strategy == "uniform":
+            return {rep.modality: 1.0 / len(representations) for rep in representations}
+        return {rep.modality: 1.0 / len(representations) for rep in representations}
+
+    def _weighted_sum(self, representations: list[ModalityRepresentation], weights: dict[str, float]) -> np.ndarray:
+        fused: np.ndarray | None = None
+        for rep in representations:
+            scaled = np.asarray(rep.latent, dtype=np.float32) * weights.get(rep.modality, 0.0)
+            fused = scaled if fused is None else fused + scaled
+        if fused is None:
+            fused = np.zeros(1, dtype=np.float32)
+        return fused
+
+    def _detect_contradictions(self, representations: list[ModalityRepresentation]) -> list[dict[str, object]]:
+        contradictions: list[dict[str, object]] = []
+        if len(representations) < 2:
+            return contradictions
+        modalities = [rep.modality for rep in representations]
+        if len(set(modalities)) != len(modalities):
+            return contradictions
+        scores = {rep.modality: float(np.mean(rep.latent)) for rep in representations}
+        if max(scores.values()) - min(scores.values()) > 0.5:
+            contradictions.append(
+                {
+                    "contradiction_id": "latent_mean_disagreement",
+                    "modalities": tuple(modalities),
+                    "contradiction_type": "latent_mean_disagreement",
+                    "severity": float(max(scores.values()) - min(scores.values())),
+                    "confidence": float(sum(rep.confidence for rep in representations) / len(representations)),
+                    "evidence": {m: scores[m] for m in scores},
+                    "resolution": None,
+                }
+            )
+        return contradictions

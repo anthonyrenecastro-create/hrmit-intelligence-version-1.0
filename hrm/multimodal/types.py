@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+ArrayLike = np.ndarray
 
 
 @dataclass(frozen=True)
@@ -11,16 +13,16 @@ class ModalityInput:
     modality: str
     source_id: str
     payload: Any
-    timestamp: float | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    timestamp: float | None
+    metadata: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class DecodedModality:
     modality: str
     source_id: str
-    tensor: np.ndarray
-    mask: np.ndarray | None
+    tensor: ArrayLike
+    mask: ArrayLike | None
     shape: tuple[int, ...]
     dtype: str
     timestamp: float | None
@@ -31,9 +33,9 @@ class DecodedModality:
 class ModalityRepresentation:
     modality: str
     source_id: str
-    latent: np.ndarray
+    latent: ArrayLike
     confidence: float
-    mask: np.ndarray | None
+    mask: ArrayLike | None
     timestamp: float | None
     encoder_name: str
     metadata: dict[str, Any]
@@ -41,7 +43,7 @@ class ModalityRepresentation:
 
 @dataclass(frozen=True)
 class FusionResult:
-    fused_latent: np.ndarray
+    fused_latent: ArrayLike
     modality_weights: dict[str, float]
     modality_confidences: dict[str, float]
     missing_modalities: tuple[str, ...]

@@ -1,37 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 
-from .types import FusionResult
+from hrm.multimodal.types import ModalityRepresentation
 
 
-@dataclass(frozen=True)
-class ProjectionResult:
-    state: np.ndarray
-    delta_norm: float
-    input_norm: float
-    gate: float
-    provenance: tuple[str, ...]
+class HRMProjector:
+    def __init__(self, target_dim: int = 64) -> None:
+        self.target_dim = target_dim
 
-
-class HRMStateProjector:
-    """Bounded residual projection into a one-dimensional HRM cognitive state."""
-    def __init__(self, state_dim: int, max_delta_norm: float = 1.0, seed: int = 71) -> None:
-        self.state_dim, self.max_delta_norm, self.seed = state_dim, max_delta_norm, seed
-
-    def project(self, fusion: FusionResult, state: np.ndarray) -> ProjectionResult:
-        state = np.asarray(state, np.float32)
-        if state.shape != (self.state_dim,):
-            raise ValueError(f"Expected HRM state shape {(self.state_dim,)}, got {state.shape}")
-        rng = np.random.default_rng(self.seed + fusion.fused_latent.size)
-        matrix = rng.normal(0, 1 / np.sqrt(fusion.fused_latent.size),
-                            (fusion.fused_latent.size, self.state_dim)).astype(np.float32)
-        raw = np.tanh(fusion.fused_latent @ matrix)
-        norm = float(np.linalg.norm(raw))
-        delta = raw * min(1.0, self.max_delta_norm / (norm + 1e-9))
-        gate = float(np.mean(list(fusion.modality_confidences.values())))
-        delta *= gate
-        return ProjectionResult(state + delta, float(np.linalg.norm(delta)),
-                                float(np.linalg.norm(fusion.fused_latent)), gate, fusion.provenance)
+    def project(self, representation: ModalityRepresentation) -> dict[str, object]:
+        latent = representation.latent
+        flattened = np.asarray(latent, dtype=np.float32).ravel()
+        if flattened.size == 0:
+            flattened = np.zeros(self.target_dim, dtype=np.float32)
+        projected = flattened[: self.target_dim]
+        if projected.size < self.target_dim:
+            projected = np.pad(projected, (0, self.target_dim - projected.size), mode="constant")
+        normalized = projected / (np.linalg.norm(projected) + 1e-9)
+        return {
+            "modality": representation.modality,
+            "source_id": representation.source_id,
+            "projected": normalized,
+            "projected_shape": normalized.shape,
+            "original_shape": representation.latent.shape,
+            "confidence": representation.confidence,
+            "mask": representation.mask,
+            "encoder_name": representation.encoder_name,
+            "metadata": representation.metadata,
+        }

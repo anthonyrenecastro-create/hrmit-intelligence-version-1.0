@@ -1,16 +1,20 @@
-"""Functional multimodal processing for HRMIT Stage 4."""
-
-from .fusion import ConfidenceFusion
-from .pipeline import MultimodalPipeline
-from .projection import HRMStateProjector
-from .types import DecodedModality, FusionResult, ModalityInput, ModalityRepresentation
+from .types import ModalityInput, DecodedModality, ModalityRepresentation, FusionResult
+from .registry import ModalityRegistry
+from .vision import decoder as vision_decoder
+from .audio import decoder as audio_decoder
+from .structured import decoder as structured_decoder
+from .fusion import FusionEngine
+from .projection import HRMProjector
 
 __all__ = [
-    "ConfidenceFusion",
-    "DecodedModality",
-    "FusionResult",
-    "HRMStateProjector",
     "ModalityInput",
+    "DecodedModality",
     "ModalityRepresentation",
-    "MultimodalPipeline",
+    "FusionResult",
+    "ModalityRegistry",
+    "vision_decoder",
+    "audio_decoder",
+    "structured_decoder",
+    "FusionEngine",
+    "HRMProjector",
 ]
