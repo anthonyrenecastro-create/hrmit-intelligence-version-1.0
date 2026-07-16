@@ -85,8 +85,9 @@ def test_stage4_multimodal_perception_smoke() -> None:
 
     assert result["stage"] == "Multimodal perception"
     assert result["result"]["phase"] == "Stage 4"
-    assert result["result"]["readiness"] >= 0.0
-    assert set(result["result"]["modalities"]) == {"text", "image", "audio", "video"}
+    assert result["result"]["hrm_state_projection"]["delta_norm"] > 0.0
+    assert set(result["result"]["modalities"]) == {"vision", "audio", "structured"}
+    assert result["result"]["fusion"]["provenance"]
     assert "combined_embedding_summary" in result["result"]
 
 
