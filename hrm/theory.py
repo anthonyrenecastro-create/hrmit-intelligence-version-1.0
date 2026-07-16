@@ -352,29 +352,42 @@ class HRMTheory:
 
     def _run_stage_4(
         self,
-        modality_query: str = "Text",
+        modality_query: str = "Inspect sensory inputs",
         include_modalities: list[str] | None = None,
     ) -> dict[str, Any]:
         pipeline = PerceptionPipeline()
-        sample_inputs = pipeline.sample_inputs()
-        modalities = include_modalities or ["text", "image", "audio", "video"]
-        selected_inputs = {k: sample_inputs[k] for k in modalities if k in sample_inputs}
-        if not selected_inputs:
-            raise ValueError("No valid modalities were provided to Stage 4.")
-
-        if "text" in selected_inputs:
-            selected_inputs["text"] = f"{modality_query.strip()} {selected_inputs['text']}"
-
-        integrated = pipeline.integrate(selected_inputs)
-        readiness = integrated["overall_readiness"]
+        sample_inputs, sample_metadata = pipeline.sample_inputs()
+        aliases = {"image": "vision"}
+        requested = include_modalities or ["vision", "audio", "structured"]
+        modalities = [aliases.get(name, name) for name in requested]
+        unsupported = [name for name in modalities if name not in sample_inputs]
+        if unsupported:
+            raise ValueError(
+                "Unsupported completed Stage 4 modalities: " + ", ".join(unsupported)
+                + ". Video and text are not claimed by the Stage 4 empirical milestone."
+            )
+        selected = {name: sample_inputs[name] for name in modalities}
+        metadata = {name: sample_metadata[name] for name in modalities}
+        integrated = pipeline.integrate(selected, metadata=metadata)
+        state_projection = pipeline.project_into_hrm(
+            integrated, np.zeros(BASELINE_CONFIG.shape.cognitive_dim, dtype=np.float32), max_delta_norm=0.5
+        )
         return {
             "phase": "Stage 4",
             "modality_query": modality_query,
-            "modalities": list(selected_inputs.keys()),
-            "readiness": readiness,
-            "integrated_outputs": integrated["outputs"],
+            "modalities": integrated["modalities"],
+            "integrated_outputs": integrated["representations"],
             "combined_embedding_summary": f"{len(integrated['combined_embedding'])} dims",
-            "query_influence": f"Text query appended for {modality_query.strip()[:50]}",
+            "fusion": {
+                "weights": integrated["modality_weights"],
+                "confidences": integrated["modality_confidences"],
+                "missing_modalities": integrated["missing_modalities"],
+                "contradictions": integrated["contradictions"],
+                "provenance": integrated["provenance"],
+                "diagnostics": integrated["diagnostics"],
+            },
+            "hrm_state_projection": state_projection,
+            "completion_scope": "vision_audio_structured_fusion; video_experimental",
         }
 
     def _run_stage_5(
