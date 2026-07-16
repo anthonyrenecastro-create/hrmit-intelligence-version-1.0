@@ -34,7 +34,7 @@ python3 hrm/runner.py --stage 3
 Run Stage 4 multimodal perception:
 
 ```bash
-python3 hrm/runner.py --stage 4 --modality-query "Inspect sensory inputs" --modalities "text,image,audio,video"
+python3 hrm/runner.py --stage 4 --modality-query "Inspect sensory inputs" --modalities "vision,audio,structured"
 ```
 
 Run Stage 5 distributed cognition:
@@ -62,6 +62,13 @@ Stage 6: Learning systems (continual adaptation, preference optimization, memory
 
 - Expand Stage 2 with a retrieval index and planning layer.
 - Add tool adapters and verification loops in Stage 3.
-- Integrate modality adapters for Stage 4.
+- Extend the empirical Stage 4 vision/audio/structured baseline; video remains experimental.
 - Build multi-agent coordination in Stage 5.
 - Add learning signal capture and memory refinement in Stage 6.
+
+
+## Empirical completion boundaries
+
+Stage 4 now decodes real PNG/JPEG and PCM WAV inputs, preserves structured schemas, performs confidence-aware fusion, and applies a bounded projection into HRM cognitive state. Its deterministic benchmark demonstrates multimodal complementarity. This is not a claim of general visual, audio, or video understanding.
+
+Stage 6 now includes immutable feedback and experience records, persistence and replay, bounded candidate parameter updates, held-out and regression gates, promotion, rollback, calibration metrics, and provenance. The legacy deterministic preference update remains available only as a compatibility baseline and carries `completion_claim: false`.

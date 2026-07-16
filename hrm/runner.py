@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-endpoint", type=str, default="status", help="Endpoint name for Stage 3 API verification")
     parser.add_argument("--api-payload", type=str, default='{"health": true}', help="JSON payload for Stage 3 API verification")
     parser.add_argument("--modality-query", type=str, default="Text", help="Optional text description for Stage 4 perception")
-    parser.add_argument("--modalities", type=str, default="text,image,audio,video", help="Comma-separated modalities to include in Stage 4")
+    parser.add_argument("--modalities", type=str, default="vision,audio,structured", help="Comma-separated modalities to include in Stage 4")
     parser.add_argument("--consensus-query", type=str, default="Coordinate distributed HRM reasoning and planning", help="Query used by Stage 5 agent coordination")
     parser.add_argument("--agent-roles", type=str, default="safety,efficiency,planning,recovery", help="Comma-separated agent roles for Stage 5")
     parser.add_argument("--learning-rate", type=float, default=0.05, help="Learning rate for Stage 6 preference adaptation")
