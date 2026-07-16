@@ -53,6 +53,22 @@ PROFILE = {
 OUTPUT_DIR = Path("hrm_baseline_outputs")
 
 
+class BaselineError(Exception):
+    """Base class for Stage 1 baseline execution errors."""
+
+
+class BaselineImportError(BaselineError, ImportError):
+    pass
+
+
+class BaselineConfigurationError(BaselineError, ValueError):
+    pass
+
+
+class BaselineRuntimeError(BaselineError, RuntimeError):
+    pass
+
+
 def ensure_output_dir(path: Path = OUTPUT_DIR) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -60,7 +76,7 @@ def ensure_output_dir(path: Path = OUTPUT_DIR) -> Path:
 
 def require_jax() -> None:
     if jax is None:
-        raise ImportError(
+        raise BaselineImportError(
             "JAX is required to execute the HRM baseline pipeline. Install jax to run Stage 1."
         )
 
@@ -76,10 +92,20 @@ class ShapeConfig:
     hierarchy_width: int
 
     def validate(self) -> "ShapeConfig":
-        assert self.height % self.hierarchy_height == 0
-        assert self.width % self.hierarchy_width == 0
-        assert self.cognitive_dim >= self.channels
-        assert min(asdict(self).values()) > 0
+        if self.height % self.hierarchy_height != 0:
+            raise BaselineConfigurationError(
+                "ShapeConfig height must be divisible by hierarchy_height"
+            )
+        if self.width % self.hierarchy_width != 0:
+            raise BaselineConfigurationError(
+                "ShapeConfig width must be divisible by hierarchy_width"
+            )
+        if self.cognitive_dim < self.channels:
+            raise BaselineConfigurationError(
+                "ShapeConfig cognitive_dim must be greater than or equal to channels"
+            )
+        if min(asdict(self).values()) <= 0:
+            raise BaselineConfigurationError("ShapeConfig values must all be positive")
         return self
 
 
@@ -128,11 +154,22 @@ class ExperimentConfig:
 
     def validate(self) -> "ExperimentConfig":
         self.shape.validate()
-        assert self.steps >= 4
-        assert 0 <= self.perturb_step < self.steps
-        assert self.dt >= 0
-        assert self.field_bound > 0 and self.latent_bound > 0
-        assert 0 <= self.allocation_floor <= 1
+        if self.steps < 4:
+            raise BaselineConfigurationError("ExperimentConfig.steps must be at least 4")
+        if not (0 <= self.perturb_step < self.steps):
+            raise BaselineConfigurationError(
+                "ExperimentConfig.perturb_step must be between 0 and steps - 1"
+            )
+        if self.dt < 0:
+            raise BaselineConfigurationError("ExperimentConfig.dt must be non-negative")
+        if self.field_bound <= 0 or self.latent_bound <= 0:
+            raise BaselineConfigurationError(
+                "ExperimentConfig.field_bound and latent_bound must be positive"
+            )
+        if not (0 <= self.allocation_floor <= 1):
+            raise BaselineConfigurationError(
+                "ExperimentConfig.allocation_floor must be between 0 and 1"
+            )
         return self
 
     def as_dict(self) -> dict:
@@ -162,6 +199,121 @@ class ExperimentConfig:
             self.latent_bound,
         )
         return Dynamics(*(jnp.asarray(v, dtype=jnp.float32) for v in vals))
+
+
+def _assert_shape(value: jax.Array, expected: tuple[int, ...], name: str) -> None:
+    if value.shape != expected:
+        raise BaselineConfigurationError(
+            f"{name} shape mismatch: expected {expected}, got {value.shape}"
+        )
+
+
+def _assert_finite(value: jax.Array, name: str) -> None:
+    if not bool(jnp.all(jnp.isfinite(value))):
+        raise BaselineRuntimeError(f"{name} contains non-finite values")
+
+
+def _assert_bounded(value: jax.Array, bound: float, name: str) -> None:
+    max_abs = float(jnp.max(jnp.abs(value)))
+    if max_abs > bound + 1e-6:
+        raise BaselineRuntimeError(
+            f"{name} exceeds bound {bound}: max abs {max_abs:.6f}"
+        )
+
+
+def _assert_probability(value: jax.Array, name: str) -> None:
+    if not bool(jnp.all((value >= 0.0) & (value <= 1.0))):
+        raise BaselineRuntimeError(f"{name} contains out-of-range probability values")
+
+
+def validate_state(state: State, cfg: ExperimentConfig) -> None:
+    _assert_shape(
+        state.phi,
+        (cfg.shape.batch, cfg.shape.height, cfg.shape.width, cfg.shape.channels),
+        "phi",
+    )
+    _assert_shape(
+        state.memory,
+        (cfg.shape.batch, cfg.shape.height, cfg.shape.width, cfg.shape.channels),
+        "memory",
+    )
+    _assert_shape(
+        state.cognition,
+        (cfg.shape.batch, cfg.shape.cognitive_dim),
+        "cognition",
+    )
+    _assert_shape(
+        state.hierarchy,
+        (
+            cfg.shape.batch,
+            cfg.shape.hierarchy_height,
+            cfg.shape.hierarchy_width,
+            cfg.shape.channels,
+        ),
+        "hierarchy",
+    )
+    _assert_shape(
+        state.allocation,
+        (cfg.shape.batch, 1, 1, cfg.shape.channels),
+        "allocation",
+    )
+    _assert_finite(state.phi, "phi")
+    _assert_finite(state.memory, "memory")
+    _assert_finite(state.cognition, "cognition")
+    _assert_finite(state.hierarchy, "hierarchy")
+    _assert_finite(state.allocation, "allocation")
+    _assert_bounded(state.phi, cfg.field_bound, "phi")
+    _assert_bounded(state.memory, cfg.field_bound, "memory")
+    _assert_bounded(state.cognition, cfg.latent_bound, "cognition")
+    _assert_bounded(state.hierarchy, cfg.field_bound, "hierarchy")
+    _assert_probability(state.allocation, "allocation")
+
+
+def validate_ledger(ledger: StepLedger, cfg: ExperimentConfig) -> None:
+    for field_name, value in ledger._asdict().items():
+        _assert_finite(value, field_name)
+    if float(jnp.max(ledger.ledger_relative_error)) > cfg.ledger_tolerance + 1e-12:
+        raise BaselineRuntimeError(
+            f"Ledger reconstruction exceeded tolerance: max relative error "
+            f"{float(jnp.max(ledger.ledger_relative_error)):.6e} > {cfg.ledger_tolerance:.6e}"
+        )
+    if float(jnp.min(ledger.field_variance)) < -1e-6:
+        raise BaselineRuntimeError("Ledger field_variance is negative")
+    _assert_probability(ledger.active_fraction, "active_fraction")
+
+    coherence = float(jnp.min(ledger.coherence))
+    if coherence <= 0.0:
+        raise BaselineRuntimeError(
+            f"Ledger coherence must be positive, got {coherence:.6f}"
+        )
+
+    if float(jnp.min(ledger.prediction_mse)) < 0.0:
+        raise BaselineRuntimeError(
+            "Ledger prediction_mse contains negative values"
+        )
+
+    if float(jnp.min(ledger.correction_norm)) < 0.0:
+        raise BaselineRuntimeError(
+            "Ledger correction_norm contains negative values"
+        )
+
+    if float(jnp.min(ledger.active_fraction)) < 0.0:
+        raise BaselineRuntimeError(
+            "Ledger active_fraction contains negative values"
+        )
+
+    if float(jnp.max(ledger.active_fraction)) > 1.0 + 1e-6:
+        raise BaselineRuntimeError(
+            f"Ledger active_fraction exceeds 1.0: max {float(jnp.max(ledger.active_fraction)):.6f}"
+        )
+
+    if float(jnp.min(ledger.field_variance)) < -1e-6:
+        raise BaselineRuntimeError(
+            f"Ledger field_variance has invalid values: min {float(jnp.min(ledger.field_variance)):.6f}"
+        )
+
+    if float(jnp.min(ledger.input_norm)) < 0.0:
+        raise BaselineRuntimeError("Ledger input_norm contains negative values")
 
 
 class State(NamedTuple):
@@ -416,6 +568,8 @@ def execute_config_with_params(phase: str, candidate: str, cfg: ExperimentConfig
     t0 = time.perf_counter()
     final_state, ledger = run_hrm(initial, inputs, params, cfg.dynamics(), cfg.shape, FULL)
     block_until_ready((final_state, ledger))
+    validate_state(final_state, cfg)
+    validate_ledger(ledger, cfg)
     elapsed = time.perf_counter() - t0
     metrics = score_ledger(ledger, final_state, cfg)
 

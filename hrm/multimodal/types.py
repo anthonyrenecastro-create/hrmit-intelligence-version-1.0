@@ -13,8 +13,8 @@ class ModalityInput:
     modality: str
     source_id: str
     payload: Any
-    timestamp: float | None
-    metadata: dict[str, Any]
+    timestamp: float | None = None
+    metadata: dict[str, Any] = None
 
 
 @dataclass(frozen=True)
@@ -42,11 +42,22 @@ class ModalityRepresentation:
 
 
 @dataclass(frozen=True)
+class ModalityContradiction:
+    contradiction_id: str
+    modalities: tuple[str, ...]
+    contradiction_type: str
+    severity: float
+    confidence: float
+    evidence: dict[str, Any]
+    resolution: str | None
+
+
+@dataclass(frozen=True)
 class FusionResult:
     fused_latent: ArrayLike
     modality_weights: dict[str, float]
     modality_confidences: dict[str, float]
     missing_modalities: tuple[str, ...]
-    contradictions: tuple[dict[str, Any], ...]
+    contradictions: tuple[ModalityContradiction, ...]
     provenance: tuple[str, ...]
     diagnostics: dict[str, Any]

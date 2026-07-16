@@ -1,38 +1,55 @@
 # Stage 4 Multimodal Audit
 
-## Baseline inspected
+## Summary
+The repository currently does not implement the Stage 4 multimodal architecture described in the prompt. There is only a simple placeholder perception pipeline in `hrm/perception.py`, and no dedicated `hrm/multimodal/` package or real modality-specific decoders/encoders.
 
-Repository `anthonyrenecastro-create/hrmit-intelligence-version-1.0`, default branch `main`, commit `c3a36f4`.
+## Existing Modality Adapters
+- `hrm/perception.py` defines `TextAdapter`, `ImageAdapter`, `AudioAdapter`, and `VideoAdapter`.
+- These adapters are placeholder-style:
+  - `TextAdapter` hashes text with SHA-256 and returns a normalized vector.
+  - `ImageAdapter` normalizes raw arrays and uses a flattened/padded slice as embedding.
+  - `AudioAdapter` normalizes raw waveforms and uses a flattened/padded slice as embedding.
+  - `VideoAdapter` averages image embeddings across frames.
 
-## What existed
+## Placeholder Behavior
+- Image adapter accepts any NumPy array and does not decode real PNG/JPEG bytes.
+- Audio adapter accepts any numeric array and does not decode WAV files or compute spectrograms.
+- Structured data is not supported at all.
+- Fusion is a simple average of modality embeddings in `PerceptionPipeline.integrate()`.
+- No explicit HRM state projection exists.
+- No contradiction detection, missing-modality masking, or provenance tracking is implemented.
 
-`hrm/perception.py` contained text, image, audio, and video adapters. Image and audio inputs were already-created NumPy arrays. Their first 32 flattened samples were normalized and described as embeddings. Video averaged those image vectors. Fusion averaged every modality vector without learned or confidence-aware weighting.
+## Tested Behavior
+- Current tests only include a Stage 4 smoke flow in `tests/test_stage5_stage6.py`.
+- This smoke test verifies:
+  - Stage 4 returns `phase == "Stage 4"`.
+  - the result includes requested modality names.
+  - overall readiness is numeric.
+- There are no dedicated vision/audio/structured/fusion tests.
+- No test verifies real decoding, modality-specific latent shapes, HRM state projection, or fusion improvement.
 
-Stage 4 in `hrm/theory.py` selected generated sample arrays, called the pipeline, and returned modality names, readiness, and the string `32 dims`. No result was projected into the recursive HRM state.
+## Untested and Missing Behavior
+- Real image decoding (PNG/JPEG) is missing.
+- Grayscale image handling is missing.
+- Real audio decoding and feature extraction is missing.
+- JSON/CSV/schema-aware structured data is missing.
+- Multimodal fusion strategies are missing beyond a raw mean.
+- HRM integration and projection are absent.
+- Robustness, missing modality handling, and contradiction diagnostics are absent.
+- Video support is present only as an experimental average-of-frame embeddings placeholder.
 
-## What the baseline tests proved
+## Integration Points and Dependencies
+- Stage 4 is currently implemented only through `HRMTheory._run_stage_4()` in `hrm/theory.py`.
+- It creates a `PerceptionPipeline`, selects fixed sample inputs, and runs `integrate()`.
+- There is no `hrm/multimodal` package, no config YAMLs, and no benchmark scripts.
 
-`test_stage4_multimodal_perception_smoke` proved only that Stage 4 returned a nonnegative readiness score, four modality names, and a combined-embedding summary key. `test_runner_stage4_and_stage5_smoke` proved only that the CLI exited successfully and printed the stage name.
+## Conclusion
+Stage 4 has not been implemented according to the prompt. The existing code is a structural placeholder and lacks the required real decoding, modality-specific encoders, HRM projection, fusion diagnostics, and task-based evaluation.
 
-## Classification
-
-| Capability | Baseline status |
-|---|---|
-| Real PNG/JPEG decoding | Unimplemented |
-| Real WAV decoding/features | Unimplemented |
-| Schema-preserving structured data | Unimplemented |
-| Modality-specific computed representations | Structurally present, inadequate |
-| Confidence/masks/timestamps/provenance | Unimplemented |
-| Inspectable fusion | Simulated by an unweighted mean |
-| HRM-state projection | Unimplemented |
-| Missing/contradictory/noisy inputs | Untested |
-| Task improvement from fusion | Unimplemented |
-| Temporal video processing | Unimplemented; remains experimental |
-
-## Reproducibility limitation
-
-The committed `hrm/theory.py` imports `hrm.distributed` and `hrm.distributed.types`, but those paths were not retrievable from the inspected `main` tree. Consequently, a clean reconstruction cannot execute the complete historical suite. Stage 4 is therefore developed and tested independently until that unrelated repository-integrity issue is repaired.
-
-## Implementation direction
-
-The new `hrm.multimodal` package separates immutable records, real decoders, computed modality encoders, confidence-aware fusion, and bounded HRM-state projection. Video is not claimed complete.
+## Recommended Next Steps
+1. Add `hrm/multimodal/` with shared data types and registry.
+2. Implement real vision decoding, preprocessing, encoder, and tasks.
+3. Implement audio decoding, feature extraction, encoder, and tasks.
+4. Implement structured-data schema validation and encoder.
+5. Add HRM projection and fusion modules.
+6. Add Stage 4-specific tests and benchmark scaffolding.

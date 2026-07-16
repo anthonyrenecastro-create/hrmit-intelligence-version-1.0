@@ -1,29 +1,86 @@
 from __future__ import annotations
 
-import numpy as np
+import math
+import random
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
+from .experience import ExperienceStore
 from .types import ExperienceRecord
 
 
-class ReplayBuffer:
-    def __init__(self, records: tuple[ExperienceRecord, ...], seed: int = 0) -> None:
-        self.records, self.rng = records, np.random.default_rng(seed)
+@dataclass(frozen=True)
+class ReplayConfig:
+    capacity: int = 512
+    prioritized: bool = True
+    priority_exponent: float = 0.7
+    min_probability: float = 0.01
+    recency_weight: float = 0.1
+    balance_failure_ratio: float = 0.5
+    seed: int = 0
 
-    def sample(self, count: int, strategy: str = "prioritized") -> tuple[ExperienceRecord, ...]:
-        if not self.records or count < 1:
-            return ()
-        replace = count > len(self.records)
-        if strategy == "uniform":
-            probabilities = None
-        elif strategy == "prioritized":
-            priorities = np.asarray([max(record.priority, 1e-6) for record in self.records])
-            probabilities = priorities / priorities.sum()
-        elif strategy == "balanced":
-            successes = [r for r in self.records if r.task_outcome.success]
-            failures = [r for r in self.records if not r.task_outcome.success]
-            half = count // 2
-            return tuple((successes * count)[:half] + (failures * count)[:count-half])
+
+class ReplayBuffer:
+    def __init__(self, store: ExperienceStore, config: ReplayConfig | None = None) -> None:
+        self.store = store
+        self.config = config or ReplayConfig()
+        self.random = random.Random(self.config.seed)
+
+    def add(self, experience: ExperienceRecord) -> None:
+        if len(self.store.experiences) >= self.config.capacity:
+            self._prune_oldest()
+        self.store.add(experience)
+
+    def _prune_oldest(self) -> None:
+        self.store.experiences.sort(key=lambda exp: exp.created_at)
+        while len(self.store.experiences) >= self.config.capacity:
+            self.store.experiences.pop(0)
+
+    def sample(self, batch_size: int) -> list[ExperienceRecord]:
+        if not self.store.experiences:
+            return []
+        if self.config.prioritized:
+            weights = [self._experience_weight(exp) for exp in self.store.experiences]
+            total = sum(weights)
+            if total <= 0.0:
+                weights = [1.0] * len(weights)
+                total = len(weights)
+            probabilities = [max(self.config.min_probability, w / total) for w in weights]
+            normalized = [p / sum(probabilities) for p in probabilities]
+            batch = self.random.choices(self.store.experiences, weights=normalized, k=min(batch_size, len(self.store.experiences)))
         else:
-            raise ValueError(f"Unknown replay strategy: {strategy}")
-        indices = self.rng.choice(len(self.records), count, replace=replace, p=probabilities)
-        return tuple(self.records[int(i)] for i in indices)
+            batch = self.random.sample(self.store.experiences, k=min(batch_size, len(self.store.experiences)))
+        for exp in batch:
+            self._increment_replay_count(exp)
+        return batch
+
+    def _experience_weight(self, experience: ExperienceRecord) -> float:
+        failure_bonus = 1.0 if any(not f.task_id or f.value == "failure" for f in experience.feedback) else 0.0
+        age = time.time() - experience.created_at
+        age_score = 1.0 + self.config.recency_weight * math.log1p(age)
+        return (experience.priority ** self.config.priority_exponent + failure_bonus) * age_score
+
+    def _increment_replay_count(self, experience: ExperienceRecord) -> None:
+        for index, exp in enumerate(self.store.experiences):
+            if exp.experience_id == experience.experience_id:
+                self.store.experiences[index] = ExperienceRecord(
+                    experience_id=exp.experience_id,
+                    task_outcome=exp.task_outcome,
+                    feedback=exp.feedback,
+                    reward=exp.reward,
+                    priority=exp.priority,
+                    replay_count=exp.replay_count + 1,
+                    created_at=exp.created_at,
+                    provenance=exp.provenance,
+                )
+                return
+
+    def save(self, path: Path | str) -> Path:
+        return self.store.save(path)
+
+    @classmethod
+    def load(cls, path: Path | str, config: ReplayConfig | None = None) -> "ReplayBuffer":
+        store = ExperienceStore.load(path)
+        return cls(store=store, config=config)

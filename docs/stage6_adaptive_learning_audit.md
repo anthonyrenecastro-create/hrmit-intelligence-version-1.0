@@ -1,15 +1,55 @@
-# Stage 6 Adaptive-Learning Audit
+# Stage 6 Adaptive Learning Audit
 
-## Baseline inspected
+## Existing Implementation
 
-Repository `anthonyrenecastro-create/hrmit-intelligence-version-1.0`, branch `main`, commit `c3a36f4`.
+Stage 6 is currently implemented in `hrm/learning.py` and invoked by `hrm/theory.py::_run_stage_6`.
 
-`hrm/learning.py` extracted `L_*` values, multiplied each preference by `1 + learning_rate`, incremented bias, optionally appended one memory entry, and calculated a bounded descriptive score. The update was deterministic, interpretable, and bounded only indirectly.
+### Current behavior
+- Captures baseline learning signals from `baseline_record` metrics beginning with `L_`.
+- Records an adaptation signal entry in `LongTermMemory`.
+- Adapts a `PreferenceModel` by scaling non-bias preference weights by `1 + adaptation_rate`.
+- Computes `adaptation_score` as a bounded function of baseline signal strength, preference shift, and memory growth.
 
-The Stage 6 test asserted the hard-coded result `safety == 0.432`, memory growth, and a nonnegative adaptation score. It did not test completed-task feedback, replay, learned parameters, held-out improvement, prior-task regression, candidate isolation, promotion, rollback, calibration, or provenance.
+### Existing structures
+- `LearningMetrics` records `signal_strength`, `preference_shift`, `memory_growth`, and `adaptation_score`.
+- `PreferenceModel` stores interpreted preference weights and bias.
+- `LearningSystem.update()` returns a deterministic preference update summary.
 
-The baseline is therefore classified as a controlled heuristic preference update, not empirical adaptive learning.
+## Gaps relative to complete Stage 6
 
-## New direction
+### Missing adaptation components
+- No structured feedback capture from completed tasks.
+- No task outcome or experience record abstractions.
+- No replay buffer or prioritized replay mechanism.
+- No separate candidate checkpoint training pipeline.
+- No held-out evaluation on data excluded from candidate training.
+- No regression protection or safety gate.
+- No bounded update magnitude checks beyond a static adaptation rate.
+- No rollback or checkpoint lineage.
+- No append-only provenance logging.
 
-The replacement separates immutable task/feedback/experience/candidate/evaluation records, experience persistence and replay, a narrowly scoped tunable adapter, norm-clipped candidate training, held-out and regression evaluation, promotion gating, rollback, and complete decision history. The deterministic preference update may remain as a compatibility baseline but cannot establish Stage 6 completion.
+### Unsupported claims
+- Stage 6 currently claims "learning systems" but performs only a deterministic preference weight scaling.
+- There is no evidence of parameter adaptation, held-out improvement, or catastrophic forgetting mitigation.
+- The existing `adaptation_score` is heuristic and not tied to held-out evaluation.
+
+## Current test coverage
+
+### Verified behaviors
+- Stage 6 returns the correct pipeline stage and structure.
+- Learned preference weights are updated according to the deterministic rule.
+- Memory growth is reported after adaptation.
+
+### Not verified
+- Feedback capture
+- Experience persistence or replay
+- Candidate training and checkpoint separation
+- Evaluation on held-out data
+- Regression protection
+- Rollback capability
+- Provenance completeness
+- Adaptation improvement or safety guarantees
+
+## Baseline conclusions
+
+The current Stage 6 implementation is a valid deterministic preference update baseline, but it is not a completed adaptive learning stage under the requested criteria. A new package architecture is required to add experience replay, candidate adaptation, evaluation gates, rollback, and provenance while preserving the existing deterministic logic as a safe baseline.

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import tempfile
 import time
 import uuid
@@ -23,14 +24,43 @@ def _normalize_text(text: str) -> str:
     return " ".join(str(text or "").strip().lower().split())
 
 
-def _embed_text(text: str, dim: int = DEFAULT_EMBEDDING_DIM) -> np.ndarray:
-    h = hashlib.sha256(_normalize_text(text).encode("utf-8")).digest()
+def _tokenize_text(text: str) -> list[str]:
+    normalized = _normalize_text(text)
+    tokens = re.findall(r"[a-z0-9]+", normalized)
+    return tokens
+
+
+def _stable_term_vector(term: str, dim: int) -> np.ndarray:
+    h = hashlib.sha256(term.encode("utf-8")).digest()
     values = np.frombuffer(h, dtype=np.uint8).astype(np.float32)
     if values.size < dim:
         values = np.pad(values, (0, dim - values.size), mode="constant")
-    vector = values[:dim]
-    norm = np.linalg.norm(vector) + 1e-9
-    return np.tanh(vector / norm)
+    return values[:dim]
+
+
+def _embed_text(text: str, dim: int = DEFAULT_EMBEDDING_DIM) -> np.ndarray:
+    tokens = _tokenize_text(text)
+    if not tokens:
+        return np.zeros((dim,), dtype=np.float32)
+    counts: dict[str, int] = {}
+    for token in tokens:
+        counts[token] = counts.get(token, 0) + 1
+    embedding = np.zeros((dim,), dtype=np.float32)
+    for token, count in counts.items():
+        term_vec = _stable_term_vector(token, dim)
+        weight = float(count) / np.sqrt(len(tokens))
+        embedding += weight * term_vec
+    norm = np.linalg.norm(embedding) + 1e-9
+    return np.tanh(embedding / norm)
+
+
+def _lexical_similarity(query: str, text: str) -> float:
+    q_tokens = set(_tokenize_text(query))
+    t_tokens = set(_tokenize_text(text))
+    if not q_tokens or not t_tokens:
+        return 0.0
+    overlap = q_tokens & t_tokens
+    return float(len(overlap)) / float(len(q_tokens))
 
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -65,6 +95,7 @@ class MemoryQuery:
     since_timestamp: float = 0.0
     until_timestamp: float | None = None
     limit: int = 5
+    retrieval_mode: str = "hybrid"
 
 
 @dataclass(frozen=True)
@@ -73,12 +104,17 @@ class RetrievedMemory:
     value: Any
     score: float
     similarity_score: float
+    lexical_score: float
     recency_score: float
     importance_score: float
     confidence_score: float
     source_score: float
+    task_relevance_score: float
+    conflict_penalty_score: float
     retrieval_reason: str
     metadata: dict[str, Any]
+
+
 
 
 @dataclass(frozen=True)
@@ -311,10 +347,18 @@ class WorkingMemory:
         weights = weights or {}
         weights = {**MemoryConfig().retrieval_weights, **weights}
         q_emb = _embed_text(query.query, dim=self.embedding_dim)
+        q_lex = query.query
         now = time.time()
         scored: list[RetrievedMemory] = []
         for item in self.items:
             similarity = _cosine_similarity(q_emb, item.embedding)
+            lexical = _lexical_similarity(q_lex, item.value)
+            if query.retrieval_mode == "lexical":
+                relevance = lexical
+            elif query.retrieval_mode == "semantic":
+                relevance = similarity
+            else:
+                relevance = 0.6 * similarity + 0.4 * lexical
             recency = 1.0 / (1.0 + max(0.0, query.since_timestamp or now - item.timestamp))
             importance = min(1.0, max(0.0, item.importance))
             confidence = min(1.0, max(0.0, item.confidence))
@@ -322,7 +366,8 @@ class WorkingMemory:
             task_relevance = 1.0 if query.task and query.task.lower() in item.metadata.get("context", item.key).lower() else 0.0
             conflict_penalty = 0.0
             score = (
-                weights.get("similarity", 0.0) * similarity
+                weights.get("similarity", 0.0) * relevance
+                + weights.get("lexical", 0.0) * lexical
                 + weights.get("recency", 0.0) * recency
                 + weights.get("importance", 0.0) * importance
                 + weights.get("confidence", 0.0) * confidence
@@ -336,10 +381,13 @@ class WorkingMemory:
                     value=item.value,
                     score=score,
                     similarity_score=similarity,
+                    lexical_score=lexical,
                     recency_score=recency,
                     importance_score=importance,
                     confidence_score=confidence,
                     source_score=source_relevance,
+                    task_relevance_score=task_relevance,
+                    conflict_penalty_score=conflict_penalty,
                     retrieval_reason=f"working memory: {item.key}",
                     metadata=item.metadata,
                 )
@@ -348,6 +396,9 @@ class WorkingMemory:
         if seed is not None:
             random.Random(seed).shuffle(scored)
             scored.sort(key=lambda item: (item.score, item.similarity_score, item.recency_score), reverse=True)
+        # Hard filter by source if source_filters are specified
+        if query.source_filters:
+            scored = [item for item in scored if item.source_score > 0.0]
         return scored[:limit]
 
     def expire(self, current_step: int) -> list[str]:
@@ -379,6 +430,7 @@ class EpisodicMemory:
         weights = weights or {}
         weights = {**MemoryConfig().retrieval_weights, **weights}
         q_emb = _embed_text(query.query, dim=self.embedding_dim)
+        q_lex = query.query
         scored: list[RetrievedMemory] = []
         for item in self.items.values():
             if item.confidence < query.min_confidence:
@@ -388,6 +440,13 @@ class EpisodicMemory:
             if item.timestamp < query.since_timestamp:
                 continue
             similarity = _cosine_similarity(q_emb, item.embedding)
+            lexical = _lexical_similarity(q_lex, item.value)
+            if query.retrieval_mode == "lexical":
+                relevance = lexical
+            elif query.retrieval_mode == "semantic":
+                relevance = similarity
+            else:
+                relevance = 0.6 * similarity + 0.4 * lexical
             recency = 1.0 / (1.0 + max(0.0, time.time() - item.timestamp))
             importance = min(1.0, max(0.0, item.importance))
             confidence = min(1.0, max(0.0, item.confidence))
@@ -395,7 +454,8 @@ class EpisodicMemory:
             task_relevance = 1.0 if query.task and query.task.lower() in item.key.lower() else 0.0
             unresolved_conflict = 1.0 if any(item.memory_id in conflict.memory_ids and conflict.status != "resolved" for conflict in self.conflicts.values()) else 0.0
             score = (
-                weights.get("similarity", 0.0) * similarity
+                weights.get("similarity", 0.0) * relevance
+                + weights.get("lexical", 0.0) * lexical
                 + weights.get("recency", 0.0) * recency
                 + weights.get("importance", 0.0) * importance
                 + weights.get("confidence", 0.0) * confidence
@@ -409,16 +469,22 @@ class EpisodicMemory:
                     value=item.value,
                     score=score,
                     similarity_score=similarity,
+                    lexical_score=lexical,
                     recency_score=recency,
                     importance_score=importance,
                     confidence_score=confidence,
                     source_score=source_relevance,
+                    task_relevance_score=task_relevance,
+                    conflict_penalty_score=unresolved_conflict,
                     retrieval_reason=f"episodic memory: {item.key}",
                     metadata=item.metadata,
                 )
             )
         if seed is not None:
             random.Random(seed).shuffle(scored)
+        # Hard filter by source if source_filters are specified
+        if query.source_filters:
+            scored = [item for item in scored if item.source_score > 0.0]
         scored.sort(key=lambda item: (item.score, item.similarity_score, item.recency_score), reverse=True)
         return scored[:limit]
 
@@ -589,16 +655,25 @@ class SemanticMemory:
         weights = weights or {}
         weights = {**MemoryConfig().retrieval_weights, **weights}
         q_emb = _embed_text(query.query, dim=self.embedding_dim)
+        q_lex = query.query
         scored: list[RetrievedMemory] = []
         for record in self.records.values():
             similarity = _cosine_similarity(q_emb, record.embedding)
+            lexical = _lexical_similarity(q_lex, record.concept)
+            if query.retrieval_mode == "lexical":
+                relevance = lexical
+            elif query.retrieval_mode == "semantic":
+                relevance = similarity
+            else:
+                relevance = 0.6 * similarity + 0.4 * lexical
             recency = 1.0 / (1.0 + max(0.0, time.time() - record.metadata.get("created_at", time.time())))
             importance = 1.0
             confidence = min(1.0, max(0.0, record.confidence))
             source_relevance = 1.0
             task_relevance = 1.0 if query.task and query.task.lower() in record.concept.lower() else 0.0
             score = (
-                weights.get("similarity", 0.0) * similarity
+                weights.get("similarity", 0.0) * relevance
+                + weights.get("lexical", 0.0) * lexical
                 + weights.get("recency", 0.0) * recency
                 + weights.get("importance", 0.0) * importance
                 + weights.get("confidence", 0.0) * confidence
@@ -611,16 +686,22 @@ class SemanticMemory:
                     value=record.prototype,
                     score=score,
                     similarity_score=similarity,
+                    lexical_score=lexical,
                     recency_score=recency,
                     importance_score=importance,
                     confidence_score=confidence,
                     source_score=source_relevance,
+                    task_relevance_score=task_relevance,
+                    conflict_penalty_score=0.0,
                     retrieval_reason=f"semantic memory: {record.concept}",
                     metadata=record.metadata,
                 )
             )
         if seed is not None:
             random.Random(seed).shuffle(scored)
+        # Hard filter by source if source_filters are specified
+        if query.source_filters:
+            scored = [item for item in scored if item.source_score > 0.0]
         scored.sort(key=lambda item: (item.score, item.similarity_score), reverse=True)
         return scored[:limit]
 
@@ -816,9 +897,10 @@ class MemorySystem:
     def retrieve(self, query: MemoryQuery, limit: int = 5, seed: int | None = None) -> list[RetrievedMemory]:
         if not self.enabled:
             return []
-        semantic_results = self.semantic.retrieve(query, limit=limit, weights=self.config.retrieval_weights, seed=seed)
-        episodic_results = self.episodic.retrieve(query, limit=limit, weights=self.config.retrieval_weights, seed=seed)
-        working_results = self.working.retrieve(query, limit=limit, weights=self.config.retrieval_weights, seed=seed)
+        effective_limit = query.limit if query.limit > 0 else limit
+        semantic_results = self.semantic.retrieve(query, limit=effective_limit, weights=self.config.retrieval_weights, seed=seed)
+        episodic_results = self.episodic.retrieve(query, limit=effective_limit, weights=self.config.retrieval_weights, seed=seed)
+        working_results = self.working.retrieve(query, limit=effective_limit, weights=self.config.retrieval_weights, seed=seed)
         combined = semantic_results + episodic_results + working_results
         unique: dict[str, RetrievedMemory] = {}
         for result in combined:
@@ -826,9 +908,9 @@ class MemorySystem:
             if existing is None or result.score > existing.score:
                 unique[result.memory_id] = result
         results = sorted(unique.values(), key=lambda item: (item.score, item.similarity_score, item.recency_score), reverse=True)
-        for result in results[:limit]:
+        for result in results[:effective_limit]:
             self.prior_use[result.memory_id] = self.prior_use.get(result.memory_id, 0) + 1
-        return results[:limit]
+        return results[:effective_limit]
 
     def retrieve_for_state(self, state: Any, task: str, limit: int | None = None) -> list[RetrievedMemory]:
         query_text = task

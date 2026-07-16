@@ -13,14 +13,17 @@ class AudioEncoder:
         tensor = np.asarray(decoded.tensor, dtype=np.float32)
         if tensor.ndim == 1:
             tensor = tensor[None, :]
-        latent = np.mean(tensor, axis=1)
-        if latent.size == 0:
-            latent = np.zeros(self.latent_dim, dtype=np.float32)
-        elif latent.size < self.latent_dim:
+        mean_spectrum = np.mean(tensor, axis=1)
+        std_spectrum = np.std(tensor, axis=1)
+        latent = np.concatenate([mean_spectrum, std_spectrum], axis=0)
+        if latent.size < self.latent_dim:
             latent = np.pad(latent, (0, self.latent_dim - latent.size), mode="constant")
         else:
             latent = latent[: self.latent_dim]
-        confidence = float(min(1.0, np.median(np.abs(tensor)) + 0.2))
+
+        energy = float(np.mean(np.abs(tensor)))
+        mask_fraction = float(np.mean(decoded.mask)) if decoded.mask is not None else 1.0
+        confidence = float(min(1.0, 0.1 + energy * 0.9 * mask_fraction))
         return ModalityRepresentation(
             modality="audio",
             source_id=decoded.source_id,
@@ -28,6 +31,6 @@ class AudioEncoder:
             confidence=confidence,
             mask=decoded.mask,
             timestamp=decoded.timestamp,
-            encoder_name="spectral_pool_baseline",
+            encoder_name="mean_std_mel_encoder",
             metadata={**decoded.metadata, "latent_dim": self.latent_dim},
         )
