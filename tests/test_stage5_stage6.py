@@ -81,7 +81,7 @@ def test_stage2_and_stage3_smoke_flow() -> None:
 
 def test_stage4_multimodal_perception_smoke() -> None:
     theory = HRMTheory()
-    result = theory.run_stage(4, modality_query="HRM sensory check", include_modalities=["text", "image", "audio", "video"])
+    result = theory.run_stage(4, modality_query="HRM sensory check", include_modalities=["vision", "audio", "structured"])
 
     assert result["stage"] == "Multimodal perception"
     assert result["result"]["phase"] == "Stage 4"
