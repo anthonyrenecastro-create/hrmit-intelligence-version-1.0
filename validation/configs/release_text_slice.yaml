@@ -1,0 +1,10 @@
+request_text: Provide a safe deterministic summary.
+seed: 7
+node_count: 16
+channels: 6
+latent_dim: 12
+memory_capacity: 16
+mode: sovereign_local
+preferred_provider: mock_deterministic
+session_id: release-validation
+ledger_tolerance: 1e-5

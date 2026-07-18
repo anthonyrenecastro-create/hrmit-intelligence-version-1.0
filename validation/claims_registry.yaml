@@ -1,0 +1,78 @@
+claims:
+  - claim_id: C-001
+    exact_wording: "A governed local text request completes through the canonical HRM transition and persists a checkpoint."
+    evidence_level: 2
+    required_tests:
+      - tests/test_stage2a_governed_text.py
+      - tests/test_hrm_core_transition.py
+      - validation release_text_slice run
+    current_status: supported
+    supporting_runs:
+      - "pytest tests/test_stage2a_governed_text.py -q"
+      - "pytest tests/test_hrm_core_transition.py tests/test_hrm_core_experiments.py -q"
+    known_limitations:
+      - "Supported for the deterministic local provider path, not for all remote providers."
+    prohibited_stronger_wording:
+      - "validated intelligence"
+      - "general reasoning advantage"
+      - "AGI"
+
+  - claim_id: C-002
+    exact_wording: "Mock-provider governed runs are deterministically replayable from the same initial state and input."
+    evidence_level: 2
+    required_tests:
+      - tests/test_hrm_core_transition.py
+      - validation release_text_slice run
+    current_status: supported
+    supporting_runs:
+      - "pytest tests/test_hrm_core_transition.py tests/test_hrm_core_experiments.py -q"
+    known_limitations:
+      - "Replay is validated for the mock deterministic provider path; fixed local-model determinism remains backend-dependent."
+    prohibited_stronger_wording:
+      - "fully deterministic under all backends"
+      - "bitwise identical for every provider"
+
+  - claim_id: C-003
+    exact_wording: "Memory and cognition mechanisms materially alter the governed transition under executive metadata."
+    evidence_level: 2
+    required_tests:
+      - tests/test_hrm_core_experiments.py
+      - tests/test_stage2a_governed_text.py
+    current_status: supported
+    supporting_runs:
+      - "pytest tests/test_hrm_core_experiments.py -q"
+      - "pytest tests/test_stage2a_governed_text.py -q"
+    known_limitations:
+      - "The effect is demonstrated on controlled text tasks, not on broad open-ended reasoning."
+    prohibited_stronger_wording:
+      - "general cognition advantage"
+      - "autonomous reasoning"
+
+  - claim_id: C-004
+    exact_wording: "Sovereign-local operation uses a local provider and avoids remote fallback on the governed text slice."
+    evidence_level: 2
+    required_tests:
+      - tests/test_stage2a_governed_text.py
+      - validation sovereign_local slice
+    current_status: supported
+    supporting_runs:
+      - "pytest tests/test_stage2a_governed_text.py -q"
+    known_limitations:
+      - "The release validation harness still needs a full final run record for the repository-level command."
+    prohibited_stronger_wording:
+      - "secure by default"
+      - "air-gapped verified"
+
+  - claim_id: C-005
+    exact_wording: "The HRM core ledger reconstructs the fixed-carrier transition within configured tolerance."
+    evidence_level: 1
+    required_tests:
+      - tests/test_hrm_core_transition.py
+    current_status: supported
+    supporting_runs:
+      - "pytest tests/test_hrm_core_transition.py tests/test_hrm_core_experiments.py -q"
+    known_limitations:
+      - "Current ledger attribution is still strongest for the fixed-carrier slice and does not yet cover the full future topology/geometry roadmap."
+    prohibited_stronger_wording:
+      - "complete attribution for every possible transition"
+      - "scientific proof of intelligence"

@@ -22,6 +22,9 @@ class ExperienceStore:
     def list_ids(self) -> list[str]:
         return [exp.experience_id for exp in self.experiences]
 
+    def all(self) -> list[ExperienceRecord]:
+        return list(self.experiences)
+
     def save(self, path: Path | str) -> Path:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

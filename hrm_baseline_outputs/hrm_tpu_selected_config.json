@@ -1,0 +1,31 @@
+{
+  "shape": {
+    "batch": 2,
+    "height": 8,
+    "width": 8,
+    "channels": 4,
+    "cognitive_dim": 16,
+    "hierarchy_height": 4,
+    "hierarchy_width": 4
+  },
+  "steps": 32,
+  "dt": 0.08,
+  "diffusion": 0.18,
+  "reaction_gain": 0.55,
+  "reaction_saturation": 0.35,
+  "input_gain": 0.35,
+  "memory_gain": 0.18,
+  "memory_decay": 0.08,
+  "cognitive_gain": 0.1,
+  "guidance_gain": 0.16,
+  "hierarchy_gain": 0.12,
+  "allocation_floor": 0.2,
+  "field_bound": 4.0,
+  "latent_bound": 4.0,
+  "perturb_step": 16,
+  "perturb_strength": 1.5,
+  "recovery_threshold_fraction": 0.1,
+  "recovery_weight": 0.25,
+  "safety_weight": 0.05,
+  "ledger_tolerance": 0.0005
+}

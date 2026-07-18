@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover - fallback for minimal runtime environments
+    Image = None
 
 from hrm.multimodal.types import DecodedModality
 from hrm.multimodal.preprocessing import normalize_tensor, channel_first, add_batch_dim
@@ -16,9 +19,12 @@ class VisionPreprocessor:
         tensor = decoded.tensor
         if tensor.ndim == 3 and tensor.shape[-1] == 1:
             tensor = np.repeat(tensor, 3, axis=-1)
-        image = Image.fromarray(tensor.astype(np.uint8).squeeze())
-        image = image.resize(self.target_size, Image.BILINEAR)
-        tensor = np.asarray(image, dtype=np.float32)
+        if Image is not None:
+            image = Image.fromarray(tensor.astype(np.uint8).squeeze())
+            image = image.resize(self.target_size, Image.BILINEAR)
+            tensor = np.asarray(image, dtype=np.float32)
+        else:
+            tensor = np.asarray(tensor, dtype=np.float32)
         if tensor.ndim == 2:
             tensor = tensor[..., None]
         if self.normalize:

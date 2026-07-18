@@ -18,7 +18,7 @@ class FusionEngine:
         fused = self._weighted_sum(representations, weights)
         missing = tuple(sorted(set(expected_modalities or []) - set(modalities))) if expected_modalities else tuple()
         contradictions = self._detect_contradictions(representations)
-        provenance = tuple(f"{rep.modality}:{rep.source_id}" for rep in representations)
+        provenance = tuple(rep.source_id for rep in representations)
         diagnostics = {
             "strategy": self.strategy,
             "requested_modalities": tuple(expected_modalities) if expected_modalities else tuple(modalities),
@@ -114,3 +114,30 @@ class FusionEngine:
         exp_values = np.exp(shifted)
         total = np.sum(exp_values)
         return exp_values / (total + 1e-9)
+
+
+class ConfidenceFusion(FusionEngine):
+    def __init__(self) -> None:
+        super().__init__(strategy="confidence_weighted")
+
+    def fuse(self, representations: list[ModalityRepresentation], expected_modalities: list[str] | None = None) -> FusionResult:
+        result = super().fuse(representations, expected_modalities=expected_modalities)
+        contradiction_dicts = []
+        for item in result.contradictions:
+            contradiction_dicts.append(
+                {
+                    "left": item.modalities[0],
+                    "right": item.modalities[1],
+                    "cosine_similarity": 1.0 - item.severity,
+                    "confidence": item.confidence,
+                }
+            )
+        return FusionResult(
+            fused_latent=result.fused_latent,
+            modality_weights=result.modality_weights,
+            modality_confidences=result.modality_confidences,
+            missing_modalities=result.missing_modalities,
+            contradictions=tuple(contradiction_dicts),
+            provenance=result.provenance,
+            diagnostics=result.diagnostics,
+        )

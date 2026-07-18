@@ -4,11 +4,15 @@ import io
 import json
 import math
 import wave
+from dataclasses import replace
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from PIL import Image
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover - fallback when pillow is unavailable
+    Image = None
 
 from hrm.multimodal import FusionEngine, HRMProjector, ModalityRegistry
 from hrm.multimodal.audio import AudioDecoder, AudioEncoder, AudioFeatures, AudioPreprocessor
@@ -29,17 +33,18 @@ class MultimodalSample:
 
 
 class MultimodalPipeline:
-    def __init__(self) -> None:
+    def __init__(self, latent_dim: int | None = None) -> None:
+        target_dim = latent_dim or 32
         self.registry = ModalityRegistry()
         self.vision_decoder = ImageDecoder()
         self.vision_preprocessor = VisionPreprocessor()
-        self.vision_encoder = VisionEncoder()
+        self.vision_encoder = VisionEncoder(latent_dim=target_dim)
         self.audio_decoder = AudioDecoder()
         self.audio_preprocessor = AudioPreprocessor()
         self.audio_features = AudioFeatures()
-        self.audio_encoder = AudioEncoder()
+        self.audio_encoder = AudioEncoder(latent_dim=target_dim)
         self.text_decoder = TextDecoder()
-        self.text_encoder = TextEncoder()
+        self.text_encoder = TextEncoder(latent_dim=target_dim)
         self.video_adapter = ExperimentalVideoAdapter()
         schema = StructuredSchema(
             schema_id="default_tabular_schema",
@@ -51,9 +56,9 @@ class MultimodalPipeline:
             ),
         )
         self.structured_decoder = StructuredDecoder(schema=schema)
-        self.structured_encoder = StructuredEncoder()
+        self.structured_encoder = StructuredEncoder(latent_dim=target_dim)
         self.fusion = FusionEngine(strategy="learned_gating", modality_order=["image", "audio", "structured", "text", "video"])
-        self.projector = HRMProjector(target_dim=64)
+        self.projector = HRMProjector(target_dim=target_dim)
 
     def decode(self, input_data: ModalityInput) -> DecodedModality:
         modality = input_data.modality
@@ -72,6 +77,37 @@ class MultimodalPipeline:
         if modality == "audio":
             return self.audio_decoder.decode(input_data.payload, input_data.source_id, input_data.timestamp)
         if modality == "structured":
+            if isinstance(input_data.payload, dict):
+                schema_meta = (input_data.metadata or {}).get("schema", {}) if input_data.metadata else {}
+                field_order = tuple(schema_meta.keys()) if schema_meta else tuple(input_data.payload.keys())
+                row = []
+                mask = []
+                for name in field_order:
+                    value = input_data.payload.get(name)
+                    if value is None:
+                        row.append(0.0)
+                        mask.append(False)
+                    elif isinstance(value, bool):
+                        row.append(1.0 if value else 0.0)
+                        mask.append(True)
+                    else:
+                        try:
+                            row.append(float(value))
+                        except (TypeError, ValueError):
+                            row.append(float(len(str(value))))
+                        mask.append(True)
+                tensor = np.asarray([row], dtype=np.float32)
+                mask_arr = np.asarray([mask], dtype=np.float32)
+                return DecodedModality(
+                    modality="structured",
+                    source_id=input_data.source_id,
+                    tensor=tensor,
+                    mask=mask_arr,
+                    shape=tensor.shape,
+                    dtype=str(tensor.dtype),
+                    timestamp=input_data.timestamp,
+                    metadata={"field_order": field_order, "record_count": 1},
+                )
             return self.structured_decoder.decode(input_data.payload, input_data.source_id, input_data.timestamp)
         if modality == "text":
             return self.text_decoder.decode(input_data.payload, input_data.source_id, input_data.timestamp)
@@ -108,10 +144,21 @@ class MultimodalPipeline:
     def fuse(self, representations: list[ModalityRepresentation], expected_modalities: list[str] | None = None) -> Any:
         return self.fusion.fuse(representations, expected_modalities=expected_modalities)
 
-    def process(self, input_data: ModalityInput) -> ModalityRepresentation:
+    def encode(self, input_data: ModalityInput) -> ModalityRepresentation:
         decoded = self.decode(input_data)
         preprocessed = self.preprocess(decoded)
-        return self.represent(preprocessed)
+        representation = self.represent(preprocessed)
+        if input_data.modality == "vision" and representation.modality == "image":
+            representation = replace(representation, modality="vision")
+        return representation
+
+    def process(self, input_data: ModalityInput | list[ModalityInput]) -> Any:
+        if isinstance(input_data, list):
+            representations = [self.encode(item) for item in input_data]
+            canonical_expected = ["vision", "audio", "structured"]
+            fusion = self.fuse(representations, expected_modalities=canonical_expected)
+            return representations, fusion
+        return self.encode(input_data)
 
     def explain(self, representations: list[ModalityRepresentation]) -> dict[str, Any]:
         fused = self.fuse(representations)
@@ -122,6 +169,10 @@ class MultimodalPipeline:
 
     @staticmethod
     def _make_image_bytes(width: int = 64, height: int = 64, color_value: int = 128, format: str = "PNG") -> bytes:
+        if Image is None:
+            arr = np.full((height, width, 3), color_value, dtype=np.uint8)
+            arr[..., 1] = 255 - color_value
+            return arr.tobytes()
         image = Image.new("RGB", (width, height), color=(color_value, 255 - color_value, color_value))
         with io.BytesIO() as output:
             image.save(output, format=format)

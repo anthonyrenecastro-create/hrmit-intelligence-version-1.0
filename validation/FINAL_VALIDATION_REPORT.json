@@ -1,0 +1,125 @@
+{
+  "ablation": {
+    "ablated_activation": 0.0,
+    "base_activation": 0.02038470096886158,
+    "diffusion_disabled_divergence": 0.020380595698952675,
+    "error": null
+  },
+  "activations": {
+    "answer_content": "Deterministic draft for llama3.1:8b: h-6cbae733bdfa",
+    "clarification_needed": false,
+    "confidence": 0.72,
+    "internal_task_status": "completed",
+    "memory_references_used": [
+      "query::Provide a safe determini"
+    ],
+    "provenance_digest": "06c4c885e18499f9a37cac53d2de3b04308b38370a66ab15556fc9bac06a442e",
+    "request_id": "req-53d580007eb5",
+    "response_style": "concise_professional",
+    "safety_status": "ok",
+    "session_id": "release-validation",
+    "tool_results_used": [],
+    "unresolved_uncertainties": []
+  },
+  "artifact_root": "validation/artifacts/run-20260718-180926",
+  "checks": {
+    "activation_ok": true,
+    "divergence_ok": true,
+    "ledger_ok": true,
+    "model_failure_safe": true,
+    "replay_ok": true,
+    "sovereignty_ok": true,
+    "state_failure_safe": true
+  },
+  "config": {
+    "channels": 6,
+    "latent_dim": 12,
+    "ledger_tolerance": 1e-05,
+    "memory_capacity": 16,
+    "mode": "sovereign_local",
+    "node_count": 16,
+    "preferred_provider": "mock_deterministic",
+    "request_text": "Provide a safe deterministic summary.",
+    "seed": 7,
+    "session_id": "release-validation"
+  },
+  "config_digest": "dbc00ced16a1dcf663fb8b0f3e38225c065b1046462a1f3f93c245ee9379afe4",
+  "environment": {
+    "dependencies": {
+      "Pillow": "12.3.0",
+      "httpx": "unavailable",
+      "numpy": "2.5.1",
+      "pytest": "9.1.1"
+    },
+    "dirty_tree": true,
+    "git_commit": "21d40f4d36310be99218796102cc6c7db9d1437a",
+    "machine": "x86_64",
+    "platform": "Linux-6.8.0-1052-azure-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.1"
+  },
+  "evidence_level": 2,
+  "failure_injection": {
+    "model_failure_error": null,
+    "model_failure_provider": "mock_timeout",
+    "model_failure_response": "No response available.\n\n[confidence=0.40 safety=ok]",
+    "model_failure_state_version_after": 1,
+    "state_failure_detected": true,
+    "state_failure_result": {
+      "error": "ValueError",
+      "message": "Invalid state before transition: ('Phi contains non-finite values',)"
+    }
+  },
+  "final_state_hash": "a58cf579fcd4622feedc1aa740a2386386898e66252abdb1f1c42051b4837d7d",
+  "initial_state_hash": "8ae86f0348b0e7eae61f146571eac664182f9dae919721cf8eb77b104d27f13e",
+  "ledger_max_rel_error": 8.573152854296495e-08,
+  "ledger_tolerance": 1e-05,
+  "mechanism_activations": {
+    "cognition": 0.0004519101930782199,
+    "diffusion": 0.02038470096886158,
+    "hierarchy": 0.002789157209917903,
+    "input_projection": 0.1316528022289276,
+    "memory": 0.007275414653122425,
+    "reaction": 0.020955020561814308,
+    "regional": 0.001994488527998328
+  },
+  "observability": {
+    "mechanism_activations": {
+      "cognition": 0.0004519101930782199,
+      "diffusion": 0.02038470096886158,
+      "hierarchy": 0.002789157209917903,
+      "input_projection": 0.1316528022289276,
+      "memory": 0.007275414653122425,
+      "reaction": 0.020955020561814308,
+      "regional": 0.001994488527998328
+    },
+    "provider_selection": {
+      "fallback_used": false,
+      "provider_id": "mock_deterministic",
+      "reason": "preferred_provider_selected",
+      "sovereignty_reduced": false
+    },
+    "request_id": "req-53d580007eb5",
+    "state_digest_after": "a58cf579fcd4622feedc1aa740a2386386898e66252abdb1f1c42051b4837d7d",
+    "state_digest_before": "8ae86f0348b0e7eae61f146571eac664182f9dae919721cf8eb77b104d27f13e",
+    "transition_runtime": 0.015880954000749625
+  },
+  "provider_used": "mock_deterministic",
+  "replay": {
+    "error": null,
+    "final_state_hash": "a58cf579fcd4622feedc1aa740a2386386898e66252abdb1f1c42051b4837d7d",
+    "matches": true,
+    "response_text_match": true
+  },
+  "response_text": "Deterministic draft for llama3.1:8b: h-6cbae733bdfa\n\n[confidence=0.72 safety=ok]",
+  "run_id": "run-20260718-180926",
+  "run_kind": "governed_text_slice",
+  "sovereignty": {
+    "error": null,
+    "mode": "sovereign_local",
+    "provider_used": "mock_deterministic",
+    "remote_fallback_used": false
+  },
+  "state_version_after": 1,
+  "state_version_before": 0
+}

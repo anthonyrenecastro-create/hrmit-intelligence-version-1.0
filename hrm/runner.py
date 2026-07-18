@@ -22,12 +22,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-epochs", type=int, default=3, help="Number of epochs for Stage 1 training")
     parser.add_argument("--train-learning-rate", type=float, default=0.02, help="Learning rate for Stage 1 training")
     parser.add_argument("--plan-query", type=str, default="Improve HRM safety and recovery", help="Query for Stage 2 planning")
+    parser.add_argument("--governed-text", action="store_true", help="Enable Stage 2A governed text vertical slice")
+    parser.add_argument("--governed-input", type=str, default="Summarize current objective and next safe action.", help="Input text for Stage 2A governed text request")
+    parser.add_argument("--inference-provider", type=str, default="mock_deterministic", help="Inference provider id for Stage 2A (mock_deterministic or ollama)")
     parser.add_argument("--api-endpoint", type=str, default="status", help="Endpoint name for Stage 3 API verification")
     parser.add_argument("--api-payload", type=str, default='{"health": true}', help="JSON payload for Stage 3 API verification")
     parser.add_argument("--modality-query", type=str, default="Text", help="Optional text description for Stage 4 perception")
     parser.add_argument("--modalities", type=str, default="vision,audio,structured", help="Comma-separated modalities to include in Stage 4")
+    parser.add_argument("--governed-multimodal", action="store_true", help="Enable governed contract response for Stage 4 multimodal output")
     parser.add_argument("--consensus-query", type=str, default="Coordinate distributed HRM reasoning and planning", help="Query used by Stage 5 agent coordination")
     parser.add_argument("--agent-roles", type=str, default="safety,efficiency,planning,recovery", help="Comma-separated agent roles for Stage 5")
+    parser.add_argument("--governed-consensus", action="store_true", help="Enable governed contract response for Stage 5 distributed consensus")
     parser.add_argument("--learning-rate", type=float, default=0.05, help="Learning rate for Stage 6 preference adaptation")
     parser.add_argument("--starting-preferences", type=str, default='{"exploration": 0.2, "safety": 0.3, "efficiency": 0.5, "bias": 0.0}', help="JSON string for Stage 6 starting preference weights")
     return parser.parse_args()
@@ -51,6 +56,9 @@ def main() -> None:
             baseline_record=None,
             plan_query=args.plan_query,
             output_dir=args.output,
+            use_governed_text=args.governed_text,
+            governed_input=args.governed_input,
+            inference_provider=args.inference_provider,
         )
     elif args.stage == 3:
         result = theory.run_stage(
@@ -58,6 +66,7 @@ def main() -> None:
             baseline_record=None,
             api_endpoint=args.api_endpoint,
             api_payload=json.loads(args.api_payload),
+            inference_provider=args.inference_provider,
         )
     elif args.stage == 4:
         modalities = [item.strip() for item in args.modalities.split(",") if item.strip()]
@@ -65,6 +74,9 @@ def main() -> None:
             4,
             modality_query=args.modality_query,
             include_modalities=modalities,
+            use_governed_multimodal=args.governed_multimodal,
+            inference_provider=args.inference_provider,
+            output_dir=args.output,
         )
     elif args.stage == 5:
         agent_roles = [item.strip() for item in args.agent_roles.split(",") if item.strip()]
@@ -73,6 +85,9 @@ def main() -> None:
             baseline_record=None,
             consensus_query=args.consensus_query,
             agent_roles=agent_roles,
+            use_governed_consensus=args.governed_consensus,
+            inference_provider=args.inference_provider,
+            output_dir=args.output,
         )
     elif args.stage == 6:
         try:

@@ -348,7 +348,7 @@ class WorkingMemory:
         weights = {**MemoryConfig().retrieval_weights, **weights}
         q_emb = _embed_text(query.query, dim=self.embedding_dim)
         q_lex = query.query
-        now = time.time()
+        max_step = max(item.sequence_step for item in self.items)
         scored: list[RetrievedMemory] = []
         for item in self.items:
             similarity = _cosine_similarity(q_emb, item.embedding)
@@ -359,7 +359,8 @@ class WorkingMemory:
                 relevance = similarity
             else:
                 relevance = 0.6 * similarity + 0.4 * lexical
-            recency = 1.0 / (1.0 + max(0.0, query.since_timestamp or now - item.timestamp))
+            step_distance = max(0, max_step - item.sequence_step)
+            recency = 1.0 / (1.0 + float(step_distance))
             importance = min(1.0, max(0.0, item.importance))
             confidence = min(1.0, max(0.0, item.confidence))
             source_relevance = 1.0 if not query.source_filters or item.source in query.source_filters else 0.0
@@ -432,6 +433,7 @@ class EpisodicMemory:
         q_emb = _embed_text(query.query, dim=self.embedding_dim)
         q_lex = query.query
         scored: list[RetrievedMemory] = []
+        max_step = max(item.sequence_step for item in self.items.values())
         for item in self.items.values():
             if item.confidence < query.min_confidence:
                 continue
@@ -447,7 +449,8 @@ class EpisodicMemory:
                 relevance = similarity
             else:
                 relevance = 0.6 * similarity + 0.4 * lexical
-            recency = 1.0 / (1.0 + max(0.0, time.time() - item.timestamp))
+            step_distance = max(0, max_step - item.sequence_step)
+            recency = 1.0 / (1.0 + float(step_distance))
             importance = min(1.0, max(0.0, item.importance))
             confidence = min(1.0, max(0.0, item.confidence))
             source_relevance = 1.0 if not query.source_filters or item.source in query.source_filters else 0.0

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from .types import EvaluationReport
 
 
@@ -63,3 +65,61 @@ class Evaluator:
 
     def _compute_safety(self, candidate_checkpoint: dict[str, Any]) -> float:
         return 1.0 - min(1.0, abs(float(candidate_checkpoint.get("safety_bias", 0.0))))
+
+
+class CandidateEvaluator:
+    def __init__(self, min_improvement: float = 0.05, max_regression: float = 0.02) -> None:
+        self.min_improvement = float(min_improvement)
+        self.max_regression = float(max_regression)
+
+    @staticmethod
+    def _accuracy(model, x: np.ndarray, y: np.ndarray) -> float:
+        pred = np.asarray(model.predict(x)).astype(np.float32)
+        target = np.asarray(y).astype(np.float32)
+        return float(np.mean((pred > 0.5) == (target > 0.5)))
+
+    def evaluate(
+        self,
+        candidate_id: str,
+        parent_model,
+        candidate_model,
+        heldout: tuple[np.ndarray, np.ndarray],
+        regression: tuple[np.ndarray, np.ndarray],
+        update_norm: float,
+        max_update_norm: float,
+    ) -> EvaluationReport:
+        heldout_x, heldout_y = heldout
+        reg_x, reg_y = regression
+
+        parent_heldout = self._accuracy(parent_model, heldout_x, heldout_y)
+        candidate_heldout = self._accuracy(candidate_model, heldout_x, heldout_y)
+        parent_reg = self._accuracy(parent_model, reg_x, reg_y)
+        candidate_reg = self._accuracy(candidate_model, reg_x, reg_y)
+
+        improvement = candidate_heldout - parent_heldout
+        accuracy_drop = max(0.0, parent_reg - candidate_reg)
+        accepted = improvement >= self.min_improvement and accuracy_drop <= self.max_regression and update_norm <= max_update_norm + 1e-6
+
+        reasons = []
+        if improvement < self.min_improvement:
+            reasons.append("insufficient_heldout_improvement")
+        if accuracy_drop > self.max_regression:
+            reasons.append("regression_threshold_exceeded")
+        if update_norm > max_update_norm + 1e-6:
+            reasons.append("update_norm_exceeded")
+
+        return EvaluationReport(
+            candidate_id=candidate_id,
+            primary_metrics={"accuracy_improvement": float(improvement)},
+            regression_metrics={"accuracy_drop": float(accuracy_drop)},
+            safety_metrics={"update_norm": float(update_norm)},
+            calibration_metrics={"calibration_error": 0.0},
+            accepted=accepted,
+            rejection_reasons=tuple(reasons),
+            metadata={
+                "parent_heldout": float(parent_heldout),
+                "candidate_heldout": float(candidate_heldout),
+                "parent_regression": float(parent_reg),
+                "candidate_regression": float(candidate_reg),
+            },
+        )

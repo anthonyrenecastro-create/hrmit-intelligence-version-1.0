@@ -68,7 +68,13 @@ def test_non_hrm_recurrent_baseline_has_valid_loss() -> None:
 def test_stage2_and_stage3_smoke_flow() -> None:
     theory = HRMTheory()
     stage2 = theory.run_stage(2, baseline_record=None, plan_query="Smoke test planning")
-    stage3 = theory.run_stage(3, baseline_record=None, api_endpoint="status", api_payload={"health": True})
+    stage3 = theory.run_stage(
+        3,
+        baseline_record=None,
+        api_endpoint="status",
+        api_payload={"health": True},
+        inference_provider="mock_deterministic",
+    )
 
     assert stage2["stage"] == "Long-term memory and planning"
     assert stage2["result"]["plan"]["query"] == "Smoke test planning"
@@ -77,6 +83,10 @@ def test_stage2_and_stage3_smoke_flow() -> None:
     assert stage3["stage"] == "Tool use and verification"
     assert stage3["result"]["verification"]["overall_verified"] is True
     assert stage3["result"]["verification"]["schema_valid"] is True
+    assert "governed_contract" in stage3["result"]
+    assert stage3["result"]["governed_contract"]["provider_used"] == "mock_deterministic"
+    assert stage3["result"]["governed_contract"]["state_version_after"] > stage3["result"]["governed_contract"]["state_version_before"]
+    assert stage3["result"]["governed_contract"]["response_envelope"]["tool_results_used"]
 
 
 def test_stage4_multimodal_perception_smoke() -> None:
@@ -89,6 +99,22 @@ def test_stage4_multimodal_perception_smoke() -> None:
     assert set(result["result"]["modalities"]) == {"vision", "audio", "structured"}
     assert result["result"]["fusion"]["provenance"]
     assert "combined_embedding_summary" in result["result"]
+
+
+def test_stage4_multimodal_governed_contract() -> None:
+    theory = HRMTheory()
+    result = theory.run_stage(
+        4,
+        modality_query="Governed multimodal check",
+        include_modalities=["vision", "audio", "structured"],
+        use_governed_multimodal=True,
+        inference_provider="mock_deterministic",
+    )
+
+    governed = result["result"]["governed_contract"]
+    assert governed["provider_used"] == "mock_deterministic"
+    assert governed["state_version_after"] > governed["state_version_before"]
+    assert governed["response_envelope"]["safety_status"] == "ok"
 
 
 def test_stage5_distributed_cognition_contains_expected_keys() -> None:
@@ -109,6 +135,23 @@ def test_stage5_distributed_cognition_contains_expected_keys() -> None:
     assert set(coordination["consensus"]["role_influence"].keys()) == {"safety", "efficiency", "planning", "recovery"}
     assert all(value >= 0.0 for value in coordination["consensus"]["role_influence"].values())
     assert coordination["distributed_plan"]["plan_steps"]
+
+
+def test_stage5_distributed_cognition_governed_contract() -> None:
+    theory = HRMTheory()
+    result = theory.run_stage(
+        5,
+        baseline_record=None,
+        consensus_query="Coordinate distributed HRM reasoning",
+        agent_roles=["safety", "efficiency", "planning", "recovery"],
+        use_governed_consensus=True,
+        inference_provider="mock_deterministic",
+    )
+
+    governed = result["result"]["governed_contract"]
+    assert governed["provider_used"] == "mock_deterministic"
+    assert governed["state_version_after"] > governed["state_version_before"]
+    assert governed["response_envelope"]["safety_status"] == "ok"
 
 
 def test_stage6_learning_systems_prefers_expected_structure() -> None:

@@ -14,6 +14,7 @@ from .evaluator import Evaluator, EvaluationConfig
 from .promotion import PromotionGate
 from .rollback import RollbackManager
 from .preference import PreferenceModelBaseline
+from .system import ControlledLearningSystem
 
 __all__ = [
     "TaskOutcome",
@@ -33,4 +34,5 @@ __all__ = [
     "PromotionGate",
     "RollbackManager",
     "PreferenceModelBaseline",
+    "ControlledLearningSystem",
 ]

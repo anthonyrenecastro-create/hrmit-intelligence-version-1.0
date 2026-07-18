@@ -23,8 +23,8 @@ class ReplayConfig:
 
 
 class ReplayBuffer:
-    def __init__(self, store: ExperienceStore, config: ReplayConfig | None = None) -> None:
-        self.store = store
+    def __init__(self, store: ExperienceStore | list[ExperienceRecord], config: ReplayConfig | None = None) -> None:
+        self.store = store if isinstance(store, ExperienceStore) else ExperienceStore(list(store))
         self.config = config or ReplayConfig()
         self.random = random.Random(self.config.seed)
 
@@ -38,9 +38,23 @@ class ReplayBuffer:
         while len(self.store.experiences) >= self.config.capacity:
             self.store.experiences.pop(0)
 
-    def sample(self, batch_size: int) -> list[ExperienceRecord]:
+    def sample(self, batch_size: int, strategy: str | None = None) -> list[ExperienceRecord]:
         if not self.store.experiences:
             return []
+        if strategy == "balanced":
+            successes = [exp for exp in self.store.experiences if bool(exp.task_outcome.success)]
+            failures = [exp for exp in self.store.experiences if not bool(exp.task_outcome.success)]
+            half = max(1, batch_size // 2)
+            chosen = []
+            if successes:
+                chosen.extend(self.random.sample(successes, k=min(half, len(successes))))
+            if failures:
+                chosen.extend(self.random.sample(failures, k=min(batch_size - len(chosen), len(failures))))
+            while len(chosen) < min(batch_size, len(self.store.experiences)):
+                chosen.append(self.random.choice(self.store.experiences))
+            for exp in chosen:
+                self._increment_replay_count(exp)
+            return chosen
         if self.config.prioritized:
             weights = [self._experience_weight(exp) for exp in self.store.experiences]
             total = sum(weights)

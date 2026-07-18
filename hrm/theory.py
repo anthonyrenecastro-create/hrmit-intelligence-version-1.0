@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +18,13 @@ from hrm.baseline import (
     BASELINE_CONFIG,
     RUN_PROFILE,
 )
+from hrm.hrm_core import HRMTransitionConfig, run_sequence_memory, run_spatial_reconstruction, state_digest
+from hrm.integration import IntegratedRuntime, MockDeterministicProvider, OllamaProvider, OperatingMode
 from hrm.distributed import DistributedCoordinator, RoleSpecialistModule, TaskGraph
 from hrm.distributed.types import CognitiveTask as DistributedTask
 from hrm.memory import LongTermMemory, MemoryQuery, MemorySystem, Planner, summarize_memory
 from hrm.multimodal.pipeline import MultimodalPipeline
+from hrm.multimodal.projection import HRMStateProjector
 from hrm.multimodal.types import ModalityInput
 from hrm.tools import APIConnector, AuditLogger, PermissionContext, PathPolicy, SelfVerifier, ToolExecutor, ToolRegistry
 from hrm.learning import (
@@ -170,18 +173,40 @@ class HRMTheory:
         diagnostic: dict[str, str] | None = None
         artifact: dict[str, Any] | None = None
         try:
-            if train:
-                artifact = train_baseline_pipeline(
-                    seed=seed,
-                    epochs=train_epochs,
-                    learning_rate=train_learning_rate,
-                    save_artifacts=True,
-                    output_dir=output_dir,
-                )
-                runtime_message = "Stage 1 executed the JAX baseline training pipeline."
-            else:
-                artifact = run_baseline_pipeline(seed=seed, save_artifacts=True, output_dir=output_dir)
-                runtime_message = "Stage 1 executed the real JAX baseline pipeline."
+            config = HRMTransitionConfig()
+            spatial = run_spatial_reconstruction(seed=seed, steps=32, config=config)
+            sequence = run_sequence_memory(seed=seed + 1, steps=24, config=config)
+
+            artifact = {
+                "phase": "Stage 1 canonical_transition",
+                "candidate": "hrm_core_reference",
+                "config_hash": BASELINE_CONFIG.config_hash(),
+                "seed": seed,
+                "backend": "cpu",
+                "profile": RUN_PROFILE,
+                "steps": 32,
+                "batch": 1,
+                "perturb_step": BASELINE_CONFIG.perturb_step,
+                "perturb_strength": BASELINE_CONFIG.perturb_strength,
+                "L_total": float(spatial.metrics["field_energy"] + sequence.metrics["collapse_risk"]),
+                "did_recover": spatial.metrics["collapse_risk"] < 1e-3,
+                "ledger_pass": spatial.ledger_errors["max_rel"] <= config.ledger_relative_tolerance and sequence.ledger_errors["max_rel"] <= config.ledger_relative_tolerance,
+                "bounded_pass": spatial.metrics["field_norm"] <= config.max_field_norm and sequence.metrics["field_norm"] <= config.max_field_norm,
+                "spatial_reconstruction": {
+                    "metrics": spatial.metrics,
+                    "ledger": spatial.ledger_errors,
+                    "activations": spatial.activations,
+                    "state_digest": state_digest(spatial.final_state),
+                },
+                "sequence_memory": {
+                    "metrics": sequence.metrics,
+                    "ledger": sequence.ledger_errors,
+                    "activations": sequence.activations,
+                    "state_digest": state_digest(sequence.final_state),
+                },
+            }
+
+            runtime_message = "Stage 1 executed the canonical HRM core transition pipeline."
         except BaselineImportError as error:
             runtime_message = "Stage 1 used the placeholder baseline path because JAX was unavailable."
             diagnostic = {
@@ -243,26 +268,13 @@ class HRMTheory:
         baseline_record: dict[str, Any] | None = None,
         plan_query: str = "Improve HRM safety and recovery",
         output_dir: Path | str = "hrm_baseline_outputs",
+        use_governed_text: bool = False,
+        governed_input: str = "Summarize current objective and next safe action.",
+        inference_provider: str = "mock_deterministic",
     ) -> dict[str, Any]:
         if baseline_record is None:
-            try:
-                baseline_record = run_baseline_pipeline(seed=0, save_artifacts=False)
-            except BaselineImportError as error:
-                raise RuntimeError(
-                    "Stage 2 cannot proceed because Stage 1 baseline execution failed due to missing JAX."
-                ) from error
-            except BaselineConfigurationError as error:
-                raise RuntimeError(
-                    f"Stage 2 cannot proceed because Stage 1 baseline configuration is invalid: {error}"
-                ) from error
-            except BaselineRuntimeError as error:
-                raise RuntimeError(
-                    f"Stage 2 cannot proceed because Stage 1 runtime check failed: {error}"
-                ) from error
-            except Exception as error:
-                raise RuntimeError(
-                    f"Stage 2 cannot proceed because Stage 1 encountered an unexpected error: {error}"
-                ) from error
+            stage1 = self._run_stage_1(seed=0, output_dir=output_dir)
+            baseline_record = stage1.get("baseline_record", {})
         output_dir = Path(output_dir)
         memory = MemorySystem()
         baseline_memory = LongTermMemory.from_baseline_record(baseline_record)
@@ -291,7 +303,7 @@ class HRMTheory:
             "sample_memory_keys": [item.key for item in baseline_memory.entries[:5]],
         }
         loaded_entries = len(reloaded_memory.working.items) + len(reloaded_memory.episodic.items) + len(reloaded_memory.semantic.records)
-        return {
+        result = {
             "phase": "Stage 2",
             "memory_summary": memory_summary,
             "memory_store_path": str(memory_store_path),
@@ -311,32 +323,40 @@ class HRMTheory:
             },
         }
 
+        if use_governed_text:
+            runtime = IntegratedRuntime(
+                mode=OperatingMode.SOVEREIGN_LOCAL,
+                preferred_provider=inference_provider,
+                session_id="stage2_governed",
+                checkpoint_dir=Path(output_dir) / "stage2_governed_checkpoints",
+            )
+            runtime.register_provider(MockDeterministicProvider())
+            runtime.register_provider(OllamaProvider())
+            governed = runtime.process_text_request(governed_input)
+            result["governed_text_vertical_slice"] = {
+                "response_text": governed.response_text,
+                "state_version_before": governed.state_version_before,
+                "state_version_after": governed.state_version_after,
+                "provider_used": governed.provider_used,
+                "ledger_max_rel_error": governed.ledger_max_rel_error,
+                "checkpoint_path": governed.checkpoint_path,
+                "transition_id": governed.transition_id,
+                "observability": governed.observability,
+            }
+
+        return result
+
     def _run_stage_3(
         self,
         baseline_record: dict[str, Any] | None = None,
         api_endpoint: str = "status",
         api_payload: dict[str, Any] | None = None,
         output_dir: Path | str = "hrm_baseline_outputs",
+        inference_provider: str = "mock_deterministic",
     ) -> dict[str, Any]:
         if baseline_record is None:
-            try:
-                baseline_record = run_baseline_pipeline(seed=0, save_artifacts=False)
-            except BaselineImportError as error:
-                raise RuntimeError(
-                    "Stage 3 cannot proceed because Stage 1 baseline execution failed due to missing JAX."
-                ) from error
-            except BaselineConfigurationError as error:
-                raise RuntimeError(
-                    f"Stage 3 cannot proceed because Stage 1 baseline configuration is invalid: {error}"
-                ) from error
-            except BaselineRuntimeError as error:
-                raise RuntimeError(
-                    f"Stage 3 cannot proceed because Stage 1 runtime check failed: {error}"
-                ) from error
-            except Exception as error:
-                raise RuntimeError(
-                    f"Stage 3 cannot proceed because Stage 1 encountered an unexpected error: {error}"
-                ) from error
+            stage1 = self._run_stage_1(seed=0, output_dir=output_dir)
+            baseline_record = stage1.get("baseline_record", {})
 
         registry = ToolRegistry()
         registry.register_builtin_tools()
@@ -358,35 +378,39 @@ class HRMTheory:
             valid=True,
         )
 
-        api_request = {"endpoint": api_endpoint, "payload": api_payload}
-        try:
-            api_response = api_connector.call("POST", api_endpoint, headers={"Content-Type": "application/json"}, body=api_payload, permission_context=permission_context)
-        except Exception as error:
-            api_response = {
-                "connector": api_connector.allowed_hosts,
-                "endpoint": api_endpoint,
-                "status": "error",
-                "payload": api_payload,
-                "summary": str(error),
+        tool_operations: list[tuple[str, dict[str, Any]]] = [
+            ("list_directory", {"path": str(Path.cwd())}),
+            ("read_file", {"path": str(Path(__file__).resolve())}),
+            ("execute_code", {"code": "print(1 + 2)", "timeout_seconds": 2}),
+            ("api_request", {"method": "GET", "url": "https://api.placeholder.local/status", "headers": {}, "body": {"health": True}}),
+        ]
+
+        runtime = IntegratedRuntime(
+            mode=OperatingMode.SOVEREIGN_LOCAL,
+            preferred_provider=inference_provider,
+            session_id="stage3_governed",
+            checkpoint_dir=Path(output_dir) / "stage3_governed_checkpoints",
+        )
+        runtime.register_provider(MockDeterministicProvider())
+        runtime.register_provider(OllamaProvider())
+
+        def _execute_governed_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            tool_result = tool_executor.invoke(tool_name, arguments, permission_context)
+            return {
+                "success": tool_result.success,
+                "output": tool_result.output,
+                "error": tool_result.error,
             }
 
-        tool_inputs = {
-            "list_directory": json.dumps({"path": str(Path.cwd())}),
-            "read_file": json.dumps({"path": str(Path(__file__).resolve())}),
-            "execute_code": json.dumps({"code": "print(1 + 2)", "timeout_seconds": 2}),
-            "api_request": json.dumps({"method": "GET", "url": "status", "headers": {}, "body": {"health": True}}),
-        }
-
-        tool_results = {}
-        for name, data in tool_inputs.items():
-            try:
-                arguments = json.loads(data)
-            except Exception:
-                arguments = {"input": data}
-            tool_results[name] = tool_executor.invoke(name, arguments, permission_context)
+        governed = runtime.process_tool_request(
+            objective=f"Verify tool and API execution for endpoint '{api_endpoint}'",
+            tool_operations=tool_operations,
+            tool_executor=_execute_governed_tool,
+        )
 
         verification = verifier.self_check()
         api_verification = verifier.verify_api_connector(api_endpoint, api_payload)
+        tool_execution = governed.observability.get("tool_execution", [])
         return {
             "phase": "Stage 3",
             "baseline_context": {
@@ -395,17 +419,26 @@ class HRMTheory:
                 "config_hash": baseline_record.get("config_hash"),
             },
             "registered_tools": registry.list_tools(),
-            "tool_results": {
-                name: {
-                    "success": result.success,
-                    "output": result.output,
-                    "error": result.error,
-                }
-                for name, result in tool_results.items()
+            "tool_results": {entry["tool"]: {"success": entry["success"], "output": entry["output"], "error": entry["error"]} for entry in tool_execution},
+            "governed_contract": {
+                "response_text": governed.response_text,
+                "state_version_before": governed.state_version_before,
+                "state_version_after": governed.state_version_after,
+                "provider_used": governed.provider_used,
+                "ledger_max_rel_error": governed.ledger_max_rel_error,
+                "checkpoint_path": governed.checkpoint_path,
+                "transition_id": governed.transition_id,
+                "response_envelope": {
+                    "request_id": governed.response_envelope.request_id,
+                    "session_id": governed.response_envelope.session_id,
+                    "confidence": governed.response_envelope.confidence,
+                    "safety_status": governed.response_envelope.safety_status,
+                    "tool_results_used": list(governed.response_envelope.tool_results_used),
+                },
             },
             "verification": verification,
-            "api_request": api_request,
-            "api_response": api_response,
+            "api_request": {"endpoint": api_endpoint, "payload": api_payload},
+            "api_response": api_verification.get("response"),
             "api_verification": api_verification,
         }
 
@@ -413,11 +446,19 @@ class HRMTheory:
         self,
         modality_query: str = "Text",
         include_modalities: list[str] | None = None,
+        use_governed_multimodal: bool = False,
+        inference_provider: str = "mock_deterministic",
+        output_dir: Path | str = "hrm_baseline_outputs",
     ) -> dict[str, Any]:
         pipeline = MultimodalPipeline()
         sample_inputs = pipeline.sample_inputs()
         modalities = include_modalities or ["vision", "audio", "structured"]
-        selected_inputs = {k: v for k, v in sample_inputs.__dict__.items() if k in modalities}
+        selected_inputs: dict[str, Any] = {}
+        for modality in modalities:
+            if modality == "vision" and hasattr(sample_inputs, "image"):
+                selected_inputs["vision"] = getattr(sample_inputs, "image")
+            elif hasattr(sample_inputs, modality):
+                selected_inputs[modality] = getattr(sample_inputs, modality)
         if not selected_inputs:
             raise ValueError("No valid modalities were provided to Stage 4.")
 
@@ -427,19 +468,38 @@ class HRMTheory:
             decoded = pipeline.decode(ModalityInput(modality=modality, source_id=source_id, payload=payload, timestamp=None))
             preprocessed = pipeline.preprocess(decoded)
             representation = pipeline.represent(preprocessed)
+            if modality == "vision" and representation.modality == "image":
+                representation = replace(representation, modality="vision")
             representations.append(representation)
 
         fusion_result = pipeline.fuse(representations, expected_modalities=list(selected_inputs.keys()))
         projected = [pipeline.project(rep) for rep in representations]
         modality_names = [rep.modality for rep in representations]
-        return {
+        state_projector = HRMStateProjector(state_dim=16, max_delta_norm=0.2)
+        state_projection = state_projector.project(
+            fusion_result,
+            np.zeros(16, dtype=np.float32),
+        )
+        result = {
             "phase": "Stage 4",
             "modality_query": modality_query,
             "modalities": modality_names,
             "readiness": float(np.mean([rep.confidence for rep in representations])),
             "representations": representations,
             "projection": projected,
-            "fusion": fusion_result,
+            "fusion": {
+                "fused_latent_shape": tuple(fusion_result.fused_latent.shape),
+                "provenance": tuple(fusion_result.provenance),
+                "modality_weights": dict(fusion_result.modality_weights),
+                "missing_modalities": tuple(fusion_result.missing_modalities),
+                "contradictions": [c.__dict__ for c in fusion_result.contradictions],
+            },
+            "hrm_state_projection": {
+                "delta_norm": float(state_projection.delta_norm),
+                "input_norm": float(state_projection.input_norm),
+                "gate": float(state_projection.gate),
+                "provenance": tuple(state_projection.provenance),
+            },
             "integration_summary": {
                 "fused_shape": tuple(fusion_result.fused_latent.shape),
                 "modalities": modality_names,
@@ -449,32 +509,57 @@ class HRMTheory:
             "combined_embedding_summary": f"{len(fusion_result.fused_latent)} dims",
         }
 
+        if use_governed_multimodal:
+            runtime = IntegratedRuntime(
+                mode=OperatingMode.SOVEREIGN_LOCAL,
+                preferred_provider=inference_provider,
+                session_id="stage4_governed",
+                checkpoint_dir=Path(output_dir) / "stage4_governed_checkpoints",
+            )
+            runtime.register_provider(MockDeterministicProvider())
+            runtime.register_provider(OllamaProvider())
+
+            multimodal_prompt = (
+                f"Modality query: {modality_query}\n"
+                f"Modalities: {modality_names}\n"
+                f"Readiness: {float(np.mean([rep.confidence for rep in representations])):.6f}\n"
+                f"Fused latent dims: {len(fusion_result.fused_latent)}\n"
+                f"Missing modalities: {list(fusion_result.missing_modalities)}\n"
+                f"Contradictions count: {len(fusion_result.contradictions)}\n"
+                "Produce a concise governed perception summary and next safe action."
+            )
+            governed = runtime.process_text_request(multimodal_prompt)
+            result["governed_contract"] = {
+                "response_text": governed.response_text,
+                "state_version_before": governed.state_version_before,
+                "state_version_after": governed.state_version_after,
+                "provider_used": governed.provider_used,
+                "ledger_max_rel_error": governed.ledger_max_rel_error,
+                "checkpoint_path": governed.checkpoint_path,
+                "transition_id": governed.transition_id,
+                "response_envelope": {
+                    "request_id": governed.response_envelope.request_id,
+                    "session_id": governed.response_envelope.session_id,
+                    "confidence": governed.response_envelope.confidence,
+                    "safety_status": governed.response_envelope.safety_status,
+                    "memory_references_used": list(governed.response_envelope.memory_references_used),
+                },
+            }
+
+        return result
+
     def _run_stage_5(
         self,
         baseline_record: dict[str, Any] | None = None,
         consensus_query: str = "Coordinate distributed HRM reasoning and planning",
         agent_roles: list[str] | None = None,
+        use_governed_consensus: bool = False,
+        inference_provider: str = "mock_deterministic",
+        output_dir: Path | str = "hrm_baseline_outputs",
     ) -> dict[str, Any]:
         if baseline_record is None:
-            try:
-                baseline_record = run_baseline_pipeline(seed=0, save_artifacts=False)
-            except ImportError:
-                baseline_record = {
-                    "phase": "Stage 1 placeholder",
-                    "candidate": "baseline_placeholder",
-                    "config_hash": BASELINE_CONFIG.config_hash(),
-                    "seed": 0,
-                    "backend": "cpu",
-                    "profile": RUN_PROFILE,
-                    "steps": BASELINE_CONFIG.steps,
-                    "batch": BASELINE_CONFIG.shape.batch,
-                    "perturb_step": BASELINE_CONFIG.perturb_step,
-                    "perturb_strength": BASELINE_CONFIG.perturb_strength,
-                    "L_total": 0.0,
-                    "did_recover": False,
-                    "ledger_pass": False,
-                    "bounded_pass": False,
-                }
+            stage1 = self._run_stage_1(seed=0, output_dir="hrm_baseline_outputs")
+            baseline_record = stage1.get("baseline_record", {})
 
         memory = LongTermMemory.from_baseline_record(baseline_record)
         agent_roles = agent_roles or ["safety", "efficiency", "planning", "recovery"]
@@ -494,13 +579,51 @@ class HRMTheory:
         coordinator = DistributedCoordinator(task_graph, modules)
         coordination = coordinator.run()
         memory_summary = summarize_memory(memory)
-        return {
+        result = {
             "phase": "Stage 5",
             "consensus_query": consensus_query,
             "agent_roles": agent_roles,
             "memory_summary": memory_summary,
             "coordination": coordination,
         }
+
+        if use_governed_consensus:
+            runtime = IntegratedRuntime(
+                mode=OperatingMode.SOVEREIGN_LOCAL,
+                preferred_provider=inference_provider,
+                session_id="stage5_governed",
+                checkpoint_dir=Path(output_dir) / "stage5_governed_checkpoints",
+            )
+            runtime.register_provider(MockDeterministicProvider())
+            runtime.register_provider(OllamaProvider())
+
+            consensus_prompt = (
+                f"Consensus query: {consensus_query}\n"
+                f"Agent roles: {agent_roles}\n"
+                f"Agreement score: {coordination.get('consensus', {}).get('agreement_score', 0.0):.6f}\n"
+                f"Top recommendations: {coordination.get('consensus', {}).get('top_recommendations', [])}\n"
+                f"Plan steps: {coordination.get('distributed_plan', {}).get('plan_steps', [])}\n"
+                "Produce a governed distributed-cognition summary and next safe action."
+            )
+            governed = runtime.process_text_request(consensus_prompt)
+            result["governed_contract"] = {
+                "response_text": governed.response_text,
+                "state_version_before": governed.state_version_before,
+                "state_version_after": governed.state_version_after,
+                "provider_used": governed.provider_used,
+                "ledger_max_rel_error": governed.ledger_max_rel_error,
+                "checkpoint_path": governed.checkpoint_path,
+                "transition_id": governed.transition_id,
+                "response_envelope": {
+                    "request_id": governed.response_envelope.request_id,
+                    "session_id": governed.response_envelope.session_id,
+                    "confidence": governed.response_envelope.confidence,
+                    "safety_status": governed.response_envelope.safety_status,
+                    "memory_references_used": list(governed.response_envelope.memory_references_used),
+                },
+            }
+
+        return result
 
     def _run_stage_6(
         self,
@@ -509,25 +632,8 @@ class HRMTheory:
         starting_preferences: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         if baseline_record is None:
-            try:
-                baseline_record = run_baseline_pipeline(seed=0, save_artifacts=False)
-            except ImportError:
-                baseline_record = {
-                    "phase": "Stage 1 placeholder",
-                    "candidate": "baseline_placeholder",
-                    "config_hash": BASELINE_CONFIG.config_hash(),
-                    "seed": 0,
-                    "backend": "cpu",
-                    "profile": RUN_PROFILE,
-                    "steps": BASELINE_CONFIG.steps,
-                    "batch": BASELINE_CONFIG.shape.batch,
-                    "perturb_step": BASELINE_CONFIG.perturb_step,
-                    "perturb_strength": BASELINE_CONFIG.perturb_strength,
-                    "L_total": 0.0,
-                    "did_recover": False,
-                    "ledger_pass": False,
-                    "bounded_pass": False,
-                }
+            stage1 = self._run_stage_1(seed=0, output_dir="hrm_baseline_outputs")
+            baseline_record = stage1.get("baseline_record", {})
 
         memory = LongTermMemory.from_baseline_record(baseline_record)
         feedback_capture = FeedbackCapture()

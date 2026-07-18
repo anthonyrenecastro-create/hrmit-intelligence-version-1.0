@@ -4,7 +4,8 @@ from .vision import decoder as vision_decoder
 from .audio import decoder as audio_decoder
 from .structured import decoder as structured_decoder
 from .fusion import FusionEngine
-from .projection import HRMProjector
+from .projection import HRMProjector, HRMStateProjector
+from .pipeline import MultimodalPipeline
 
 __all__ = [
     "ModalityInput",
@@ -17,4 +18,6 @@ __all__ = [
     "structured_decoder",
     "FusionEngine",
     "HRMProjector",
+    "HRMStateProjector",
+    "MultimodalPipeline",
 ]

@@ -1,0 +1,41 @@
+{
+  "audit_name": "Prompt 1 / Prompt 2 completion audit for Phase 3 validation",
+  "generated_at": "2026-07-18",
+  "repository": "hrmit-intelligence-version-1.0",
+  "summary": {
+    "prompt1": "mostly complete, with geometry/topology/transport still fixed or placeholder and ledger reconstruction partial beyond Phi",
+    "prompt2": "partially integrated; governed local text path is active, but several subsystems remain bypassed or only indirectly integrated"
+  },
+  "items": [
+    {"id": "1", "item": "Authoritative seven-block HRM state", "status": "complete", "notes": "Typed blocks exist in hrm_core.state and are used by the canonical transition."},
+    {"id": "2", "item": "Immutable common-snapshot proposal model", "status": "complete", "notes": "freeze_state creates read-only numpy snapshots and proposals read from them."},
+    {"id": "3", "item": "Canonical production transition", "status": "functionally complete but unvalidated", "notes": "The canonical engine is real and exercised by tests, but the full integration path still needed a release validation harness."},
+    {"id": "4", "item": "Field dynamics", "status": "complete", "notes": "Diffusion, reaction, regional, input projection, and bounded field updates are present in the canonical path."},
+    {"id": "5", "item": "Memory and cognition coupling", "status": "complete", "notes": "Memory and cognition mechanisms are active and consume executive metadata in the integrated path."},
+    {"id": "6", "item": "Hierarchy", "status": "complete", "notes": "A bounded hierarchy mechanism exists and contributes to canonical transitions."},
+    {"id": "7", "item": "Resource state", "status": "complete", "notes": "BudgetState exists and is updated in the canonical transition."},
+    {"id": "8", "item": "Geometry adaptation", "status": "placeholder", "notes": "Geometry state exists, but adaptive geometry mechanics are disabled or not meaningfully integrated."},
+    {"id": "9", "item": "Topology events", "status": "placeholder", "notes": "Typed topology event machinery is present only as a disabled no-op in the fixed-graph phase."},
+    {"id": "10", "item": "Transport across carrier changes", "status": "placeholder", "notes": "Only identity transport is implemented; non-identity transport remains deferred."},
+    {"id": "11", "item": "Safe-transition operator", "status": "complete", "notes": "The safety layer detects invalid values and bounds field/cognition state with logged corrections."},
+    {"id": "12", "item": "Transition ledger", "status": "partial", "notes": "Ledger reconstruction works for the fixed-carrier slice; block-level attribution remains limited and some structural effects are still represented sparsely."},
+    {"id": "13", "item": "Deterministic replay", "status": "functionally complete but unvalidated", "notes": "Deterministic replay is supported for the mock provider path and core tests, but broader replay classes remain pending."},
+    {"id": "14", "item": "Local LLM adapter", "status": "complete", "notes": "Provider-neutral adapter exists with mock deterministic and Ollama providers."},
+    {"id": "15", "item": "QuadraSeer integration", "status": "complete", "notes": "Executive governance is implemented through typed proposals and response envelopes."},
+    {"id": "16", "item": "HRM Starborn integration", "status": "complete", "notes": "Response rendering exists and consumes governed envelopes rather than raw model output."},
+    {"id": "17", "item": "Persistent memory", "status": "partial", "notes": "Persistent memory systems exist, but unification under the HRM memory block is only partial and some legacy paths still stand alone."},
+    {"id": "18", "item": "Multimodal integration", "status": "present but bypassed", "notes": "Multimodal tests and pipeline exist, but the HRM substrate is not yet the sole production owner of multimodal state."},
+    {"id": "19", "item": "Tool governance", "status": "complete", "notes": "Tool requests are wrapped in governed plans and route through the integrated runtime."},
+    {"id": "20", "item": "Distributed cognition", "status": "present but bypassed", "notes": "Distributed coordinator exists, but it remains a separate execution layer and does not yet own the canonical HRM state path."},
+    {"id": "21", "item": "Controlled learning", "status": "partial", "notes": "Learning components exist, but promotion/rollback is not yet fully tied into the governed live HRM transition path."},
+    {"id": "22", "item": "Sovereign-local mode", "status": "complete", "notes": "The integrated runtime supports local-first operation with mock deterministic fallback."},
+    {"id": "23", "item": "Hardware profiles", "status": "missing", "notes": "No concrete hardware-profile system or selection logic is present in the repository."},
+    {"id": "24", "item": "Persistence and crash recovery", "status": "partial", "notes": "Checkpoint creation exists, but robust crash recovery and checkpoint migration are not yet implemented."},
+    {"id": "25", "item": "Public API and CLI", "status": "partial", "notes": "A CLI entrypoint exists via hrm.runner, but a coherent validation/API surface is not yet complete."},
+    {"id": "26", "item": "Observability", "status": "partial", "notes": "Metrics, checkpoints, and result traces exist, but end-to-end structured observability is not yet complete."},
+    {"id": "27", "item": "Existing benchmarks", "status": "complete", "notes": "Spatial reconstruction, sequence memory, multimodal, distributed, and learning-related tests/experiments are present."},
+    {"id": "28", "item": "Existing ablations", "status": "partial", "notes": "Core ablations exist for some field mechanisms, but the full validation matrix is not yet present."},
+    {"id": "29", "item": "Existing deployment scripts", "status": "missing", "notes": "No deployment scripts, containers, or release packaging scripts were found."},
+    {"id": "30", "item": "Existing documentation", "status": "partial", "notes": "Core docs are present and accurate for the substrate, but validation/release documentation is still incomplete."}
+  ]
+}

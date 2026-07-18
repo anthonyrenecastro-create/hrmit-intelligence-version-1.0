@@ -17,15 +17,15 @@ class TaskOutcome:
     task_id: str
     task_type: str
     inputs: dict[str, Any]
-    output: Any
-    expected_output: Any | None
-    success: bool
-    score: float | None
-    completion_time: float
-    module_ids: tuple[str, ...]
-    tool_audit_ids: tuple[str, ...]
-    memory_ids: tuple[str, ...]
-    metadata: dict[str, Any]
+    output: Any = None
+    expected_output: Any | None = None
+    success: bool = False
+    score: float | None = None
+    completion_time: float = 0.0
+    module_ids: tuple[str, ...] = field(default_factory=tuple)
+    tool_audit_ids: tuple[str, ...] = field(default_factory=tuple)
+    memory_ids: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def outcome_id(self) -> str:
@@ -42,9 +42,9 @@ class FeedbackRecord:
     confidence: float
     timestamp: float
     scope: str
-    metadata: dict[str, Any]
-    objective: bool
-    suitable_for_training: bool
+    metadata: dict[str, Any] = field(default_factory=dict)
+    objective: bool = True
+    suitable_for_training: bool = True
 
     @staticmethod
     def create(

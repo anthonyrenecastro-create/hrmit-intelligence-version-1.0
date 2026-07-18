@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from PIL import Image, UnidentifiedImageError
+try:
+    from PIL import Image, UnidentifiedImageError
+except Exception:  # pragma: no cover - fallback for minimal runtime environments
+    Image = None
+
+    class UnidentifiedImageError(Exception):
+        pass
 
 from hrm.multimodal.types import DecodedModality, ModalityInput
 
@@ -21,6 +27,25 @@ class ImageDecoder:
 
     def decode(self, source: Any, source_id: str, timestamp: float | None = None) -> DecodedModality:
         raw_bytes = self._read_source(source)
+        if Image is None:
+            tensor = self._fallback_decode(raw_bytes)
+            return DecodedModality(
+                modality="vision",
+                source_id=source_id,
+                tensor=tensor,
+                mask=None,
+                shape=tensor.shape,
+                dtype=str(tensor.dtype),
+                timestamp=timestamp,
+                metadata={
+                    "format": "RAW_FALLBACK",
+                    "original_mode": "L",
+                    "converted_mode": "L",
+                    "width": int(tensor.shape[1]),
+                    "height": int(tensor.shape[0]),
+                    "pixel_count": int(tensor.shape[0] * tensor.shape[1]),
+                },
+            )
         image = self._open_image(raw_bytes)
         if image.format is None or image.format.upper() not in self.supported_formats:
             raise ValueError(f"Unsupported image format: {image.format}")
@@ -77,3 +102,15 @@ class ImageDecoder:
             raise ValueError("Malformed image bytes") from error
         except Exception as error:
             raise ValueError("Unable to decode image") from error
+
+    def _fallback_decode(self, raw_bytes: bytes) -> np.ndarray:
+        raw = np.frombuffer(raw_bytes, dtype=np.uint8)
+        if raw.size == 0:
+            raw = np.zeros((64,), dtype=np.uint8)
+        edge = int(np.sqrt(raw.size))
+        edge = max(8, min(256, edge))
+        required = edge * edge
+        if raw.size < required:
+            raw = np.pad(raw, (0, required - raw.size), mode="wrap")
+        arr = raw[:required].reshape(edge, edge).astype(np.float32)
+        return arr[..., None]

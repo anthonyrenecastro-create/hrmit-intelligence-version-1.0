@@ -5,7 +5,10 @@ from typing import Any
 import io
 
 import numpy as np
-from PIL import Image
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover - fallback for minimal runtime environments
+    Image = None
 
 from hrm.multimodal.types import DecodedModality, ModalityRepresentation
 
@@ -21,9 +24,19 @@ class ExperimentalVideoAdapter:
         frames: list[np.ndarray] = []
         for idx, frame_source in enumerate(source[: self.max_frames]):
             if isinstance(frame_source, (bytes, bytearray)):
-                with Image.open(io.BytesIO(frame_source)) as image:
-                    image = image.convert("RGB")
-                    frames.append(np.asarray(image, dtype=np.float32))
+                if Image is not None:
+                    with Image.open(io.BytesIO(frame_source)) as image:
+                        image = image.convert("RGB")
+                        frames.append(np.asarray(image, dtype=np.float32))
+                else:
+                    raw = np.frombuffer(frame_source, dtype=np.uint8)
+                    edge = int(np.sqrt(raw.size // 3)) if raw.size >= 3 else 8
+                    edge = max(8, min(64, edge))
+                    required = edge * edge * 3
+                    if raw.size < required:
+                        raw = np.pad(raw, (0, required - raw.size), mode="wrap")
+                    frame = raw[:required].reshape(edge, edge, 3).astype(np.float32)
+                    frames.append(frame)
             elif isinstance(frame_source, np.ndarray):
                 frames.append(frame_source.astype(np.float32))
             else:
