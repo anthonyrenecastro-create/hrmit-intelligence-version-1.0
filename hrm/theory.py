@@ -44,6 +44,7 @@ from hrm.learning import (
     TrainingConfig,
     PreferenceModelBaseline,
 )
+from hrm.learning.compatibility import LearningSystem
 
 
 @dataclass(frozen=True)
@@ -565,19 +566,22 @@ class HRMTheory:
         agent_roles = agent_roles or ["safety", "efficiency", "planning", "recovery"]
         modules = [RoleSpecialistModule(role, memory) for role in agent_roles]
 
-        main_task = DistributedTask.create(
-            objective=consensus_query,
-            inputs={"memory_reads": ["baseline_summary"], "memory_writes": ["stage5_consensus"]},
-            required_capabilities=frozenset(agent_roles),
-            dependencies=(),
-            priority=80,
-            deadline=None,
-            retry_limit=1,
-            metadata={"stage": 5, "query": consensus_query},
-        )
-        task_graph = TaskGraph([main_task])
+        tasks = [
+            DistributedTask.create(
+                objective=f"{consensus_query} :: {role}",
+                inputs={"memory_reads": ["baseline_summary"], "memory_writes": [f"stage5_consensus_{role}"]},
+                required_capabilities=frozenset({role}),
+                dependencies=(),
+                priority=80 - index,
+                deadline=time.time() + 30.0,
+                retry_limit=1,
+                metadata={"stage": 5, "query": consensus_query, "role": role},
+            )
+            for index, role in enumerate(agent_roles)
+        ]
+        task_graph = TaskGraph(tasks)
         coordinator = DistributedCoordinator(task_graph, modules)
-        coordination = coordinator.run()
+        coordination = coordinator.run(deadline_seconds=30.0, max_rounds=4, max_proposals=8)
         memory_summary = summarize_memory(memory)
         result = {
             "phase": "Stage 5",
@@ -757,33 +761,32 @@ class HRMTheory:
             provenance = AdaptationProvenance(
                 **{**provenance.__dict__, "active_checkpoint_after": restored.get("checkpoint_id", base_checkpoint["checkpoint_id"]), "promotion_decision": promotion["decision"], "rejection_reasons": promotion["rejection_reasons"], "rollback_id": f"rb_{candidate.candidate_id}"}
             )
+            legacy_learning = LearningSystem(memory).update(baseline_record, starting_preferences, learning_rate)
+            legacy_learning["evaluation"] = report.__dict__
+            legacy_learning["provenance"] = provenance.__dict__
             return {
                 "phase": "Stage 6",
                 "learning_rate": learning_rate,
                 "starting_preferences": starting_preferences,
                 "memory_summary": summarize_memory(memory),
                 "adaptation_mode": "controlled_heuristic",
-                "learning_result": {
-                    "status": promotion["decision"],
-                    "evaluation": report.__dict__,
-                    "provenance": provenance.__dict__,
-                },
+                "learning_result": legacy_learning,
             }
 
         provenance = AdaptationProvenance(
             **{**provenance.__dict__, "active_checkpoint_after": candidate_checkpoint.get("checkpoint_id", candidate.checkpoint_path), "promotion_decision": "accepted"}
         )
+        legacy_learning = LearningSystem(memory).update(baseline_record, starting_preferences, learning_rate)
+        legacy_learning["evaluation"] = report.__dict__
+        legacy_learning["provenance"] = provenance.__dict__
+        legacy_learning["status"] = promotion["decision"]
         return {
             "phase": "Stage 6",
             "learning_rate": learning_rate,
             "starting_preferences": starting_preferences,
             "memory_summary": summarize_memory(memory),
             "adaptation_mode": "controlled_heuristic",
-            "learning_result": {
-                "status": promotion["decision"],
-                "evaluation": report.__dict__,
-                "provenance": provenance.__dict__,
-            },
+            "learning_result": legacy_learning,
         }
 
     def _run_placeholder_stage(self, stage: HRMStage, **kwargs: Any) -> dict[str, Any]:

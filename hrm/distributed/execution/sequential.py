@@ -12,3 +12,6 @@ class SequentialExecutor:
         for task in tasks:
             results.append(worker(task))
         return results
+
+    def shutdown(self) -> None:
+        return None

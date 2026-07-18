@@ -67,7 +67,12 @@ class SpecialistModule:
 
 class RoleSpecialistModule(SpecialistModule):
     def __init__(self, role: str, memory: Any, historical_reliability: float = 0.7) -> None:
-        super().__init__(module_id=f"agent_{role}", role=role, capabilities=tuple(), historical_reliability=historical_reliability)
+        super().__init__(
+            module_id=f"agent_{role}",
+            role=role,
+            capabilities=(ModuleCapability(name=role, proficiency=0.9, supported_input_types=("text", "memory")),),
+            historical_reliability=historical_reliability,
+        )
         self.memory = memory
 
     def can_handle(self, task: CognitiveTask) -> CapabilityAssessment:

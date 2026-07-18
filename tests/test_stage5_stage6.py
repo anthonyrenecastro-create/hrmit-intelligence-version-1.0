@@ -15,6 +15,7 @@ def test_stage1_baseline_runtime_message(tmp_path: Path) -> None:
     assert result["result"]["runtime_message"] in {
         "Stage 1 executed the real JAX baseline pipeline.",
         "Stage 1 used the placeholder baseline path because JAX was unavailable.",
+        "Stage 1 executed the canonical HRM core transition pipeline.",
     }
 
 
@@ -33,6 +34,7 @@ def test_stage1_baseline_training_mode(tmp_path: Path) -> None:
     assert result["result"]["runtime_message"] in {
         "Stage 1 executed the JAX baseline training pipeline.",
         "Stage 1 used the placeholder baseline path because JAX was unavailable.",
+        "Stage 1 executed the canonical HRM core transition pipeline.",
     }
     assert "training_history" in result["result"]["baseline_record"] or "training_epochs" not in result["result"]["baseline_record"]
     if "training_epochs" in result["result"]["baseline_record"]:
@@ -166,7 +168,7 @@ def test_stage6_learning_systems_prefers_expected_structure() -> None:
     assert result["stage"] == "Learning systems"
     learning_result = result["result"]["learning_result"]
     assert result["result"]["adaptation_mode"] == "controlled_heuristic"
-    assert learning_result["signals"]["baseline_phase"] in {"Stage 1 placeholder", "Stage 1 baseline"}
+    assert learning_result["signals"]["baseline_phase"] in {"Stage 1 placeholder", "Stage 1 baseline", "Stage 1 canonical_transition"}
     assert learning_result["preference_model"]["weights"]["safety"] == pytest.approx(0.432, rel=1e-3)
     assert learning_result["adaptation_metrics"]["memory_growth"] >= 1
     assert learning_result["adaptation_metrics"]["adaptation_score"] >= 0.0

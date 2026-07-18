@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,6 +26,7 @@ class ExperimentReport:
     metrics: dict[str, float]
     ledger_errors: dict[str, float]
     activations: dict[str, float]
+    elapsed_seconds: float
 
 
 def build_engine(config: HRMTransitionConfig) -> CanonicalTransitionEngine:
@@ -53,6 +55,7 @@ def run_spatial_reconstruction(seed: int = 0, steps: int = 32, config: HRMTransi
     state = make_initial_state(node_count=32, channels=8, latent_dim=16, memory_capacity=16, seed=seed)
     engine = build_engine(config)
     last_ledger = None
+    start = time.perf_counter()
     for step in range(steps):
         drive = _ring_drive(step, node_count=32, channels=8, horizon=steps)
         result = engine.step(
@@ -71,6 +74,7 @@ def run_spatial_reconstruction(seed: int = 0, steps: int = 32, config: HRMTransi
             "max_rel": float(last_ledger.max_rel_reconstruction_error),
         },
         activations={k: float(v) for k, v in last_ledger.proposal_activations.items()},
+        elapsed_seconds=time.perf_counter() - start,
     )
 
 
@@ -79,6 +83,7 @@ def run_sequence_memory(seed: int = 0, steps: int = 24, config: HRMTransitionCon
     state = make_initial_state(node_count=16, channels=6, latent_dim=12, memory_capacity=16, seed=seed)
     engine = build_engine(config)
     last_ledger = None
+    start = time.perf_counter()
     for step in range(steps):
         token = (step % 4) / 3.0
         drive = np.zeros((16, 6), dtype=np.float32)
@@ -99,4 +104,5 @@ def run_sequence_memory(seed: int = 0, steps: int = 24, config: HRMTransitionCon
             "max_rel": float(last_ledger.max_rel_reconstruction_error),
         },
         activations={k: float(v) for k, v in last_ledger.proposal_activations.items()},
+        elapsed_seconds=time.perf_counter() - start,
     )

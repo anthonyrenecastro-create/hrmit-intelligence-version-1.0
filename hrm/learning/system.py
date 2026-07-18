@@ -45,10 +45,17 @@ class ControlledLearningSystem:
         parameters, norm = self.active.trained_candidate(x, y, learning_rate=learning_rate,
                                                           epochs=epochs, max_update_norm=self.max_update_norm)
         candidate_id, provenance_id = "candidate-" + uuid.uuid4().hex, "provenance-" + uuid.uuid4().hex
-        candidate = AdaptationCandidate(candidate_id, self.checkpoint_id, ("linear_adapter",),
-                                        {"learning_rate": learning_rate, "epochs": epochs,
-                                         "train_examples": len(x)}, norm, tuple(float(v) for v in parameters),
-                                        time.time(), provenance_id)
+        candidate = AdaptationCandidate(
+            candidate_id,
+            self.checkpoint_id,
+            ("linear_adapter",),
+            {"learning_rate": learning_rate, "epochs": epochs, "train_examples": len(x)},
+            norm,
+            f"linear://{candidate_id}",
+            time.time(),
+            provenance_id,
+            "created",
+        )
         report = self.evaluator.evaluate(candidate_id, self.active,
                                          LinearAdapter(self.active.feature_dim, parameters), heldout,
                                          regression, norm, self.max_update_norm)
