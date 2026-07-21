@@ -137,6 +137,30 @@ def test_topology_events_mutate_state_geometry_and_transport_maps() -> None:
     assert phi_transport.new_to_old_index_map is not None and any(index is None for index in phi_transport.new_to_old_index_map)
 
 
+def test_topology_events_do_not_apply_when_topology_ablation_is_disabled() -> None:
+    config = HRMTransitionConfig(topology_enabled=True, ablations=MechanismAblations(topology=False))
+    engine = build_engine(config)
+    state = make_initial_state(node_count=12, channels=4, latent_dim=8, memory_capacity=6, seed=37)
+
+    result = engine.step(
+        state,
+        HRMInput(
+            field_drive=_drive(1, nodes=12, channels=4, horizon=8),
+            metadata={"memory_query": "topology_ablated", "topology_add_nodes": 1, "topology_rewire": True},
+        ),
+    )
+
+    assert any(event.event_type == "topology_add_nodes" for event in result.ledger.proposed_events)
+    assert all(event.event_type != "topology_add_nodes" for event in result.ledger.accepted_events)
+    assert any(
+        event.event_type == "topology_add_nodes" and event.reason == "topology_disabled_or_ablated"
+        for event in result.ledger.rejected_events
+    )
+    assert result.state.topology.node_count == state.topology.node_count
+    assert result.state.topology.version == state.topology.version
+    assert result.state.geometry.laplacian.shape == state.geometry.laplacian.shape
+
+
 def test_diffusion_ablation_changes_trajectory() -> None:
     base = make_initial_state(node_count=16, channels=6, latent_dim=10, memory_capacity=8, seed=5)
 

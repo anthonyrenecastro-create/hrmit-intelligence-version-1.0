@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="294" viewBox="0 0 920 294">
+<rect x="0" y="0" width="100%" height="100%" fill="#fcfcfd"/>
+<text x="24" y="34" font-size="22" font-family="DejaVu Sans, sans-serif" fill="#222">Validation Gates</text>
+<text x="24" y="77" font-size="16" font-family="DejaVu Sans Mono, monospace" fill="#333">G1_topology_mutation_ok</text>
+<rect x="350" y="56" width="520" height="28" rx="6" fill="#eceff3"/>
+<rect x="350" y="56" width="520" height="28" rx="6" fill="#1f9d55"/>
+<text x="814" y="76" font-size="14" font-family="DejaVu Sans, sans-serif" fill="#fff">PASS</text>
+<text x="24" y="129" font-size="16" font-family="DejaVu Sans Mono, monospace" fill="#333">G2_transport_map_ok</text>
+<rect x="350" y="108" width="520" height="28" rx="6" fill="#eceff3"/>
+<rect x="350" y="108" width="520" height="28" rx="6" fill="#1f9d55"/>
+<text x="814" y="128" font-size="14" font-family="DejaVu Sans, sans-serif" fill="#fff">PASS</text>
+<text x="24" y="181" font-size="16" font-family="DejaVu Sans Mono, monospace" fill="#333">ablation_integrity_ok</text>
+<rect x="350" y="160" width="520" height="28" rx="6" fill="#eceff3"/>
+<rect x="350" y="160" width="520" height="28" rx="6" fill="#1f9d55"/>
+<text x="814" y="180" font-size="14" font-family="DejaVu Sans, sans-serif" fill="#fff">PASS</text>
+<text x="24" y="233" font-size="16" font-family="DejaVu Sans Mono, monospace" fill="#333">structural_ledger_gate_ok</text>
+<rect x="350" y="212" width="520" height="28" rx="6" fill="#eceff3"/>
+<rect x="350" y="212" width="520" height="28" rx="6" fill="#1f9d55"/>
+<text x="814" y="232" font-size="14" font-family="DejaVu Sans, sans-serif" fill="#fff">PASS</text>
+</svg>

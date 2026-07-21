@@ -176,6 +176,7 @@ class CanonicalTransitionEngine:
         topology_metric_scale = state.geometry.metric_scale
         old_to_new_index_map: list[int] = list(range(state.topology.node_count))
         topology_changed = False
+        topology_structural_enabled = self.config.topology_enabled and self.config.ablations.topology
         for event in proposed_events:
             if event.event_type == "memory_write_head" and event_allowance > 0:
                 accepted_events.append(
@@ -206,7 +207,7 @@ class CanonicalTransitionEngine:
                     )
                 )
                 event_allowance -= 1
-            elif event.event_type == "topology_add_nodes" and event_allowance > 0 and self.config.topology_enabled:
+            elif event.event_type == "topology_add_nodes" and event_allowance > 0 and topology_structural_enabled:
                 requested = int((event.metadata or {}).get("add_nodes", max(1, round(event.magnitude))))
                 add_nodes = max(0, min(requested, self.config.topology_max_add_nodes))
                 if add_nodes > 0:
@@ -240,7 +241,7 @@ class CanonicalTransitionEngine:
                             metadata=event.metadata,
                         )
                     )
-            elif event.event_type == "topology_remove_nodes" and event_allowance > 0 and self.config.topology_enabled:
+            elif event.event_type == "topology_remove_nodes" and event_allowance > 0 and topology_structural_enabled:
                 requested = int((event.metadata or {}).get("remove_nodes", max(1, round(event.magnitude))))
                 remove_nodes = max(0, min(requested, self.config.topology_max_remove_nodes))
                 if remove_nodes > 0 and topology_node_count > 1:
@@ -278,7 +279,7 @@ class CanonicalTransitionEngine:
                             metadata=event.metadata,
                         )
                     )
-            elif event.event_type == "topology_rewire_ring" and event_allowance > 0 and self.config.topology_enabled:
+            elif event.event_type == "topology_rewire_ring" and event_allowance > 0 and topology_structural_enabled:
                 accepted_events.append(
                     StructuralEvent(
                         event_id=event.event_id,
@@ -294,6 +295,19 @@ class CanonicalTransitionEngine:
                 topology_metric_scale += 0.5 * self.config.topology_metric_scale_step
                 topology_changed = True
                 event_allowance -= 1
+            elif event.event_type in {"topology_add_nodes", "topology_remove_nodes", "topology_rewire_ring"}:
+                rejected_events.append(
+                    StructuralEvent(
+                        event_id=event.event_id,
+                        event_type=event.event_type,
+                        block=event.block,
+                        accepted=False,
+                        reason="topology_disabled_or_ablated",
+                        priority=event.priority,
+                        magnitude=event.magnitude,
+                        metadata=event.metadata,
+                    )
+                )
             else:
                 rejected_events.append(
                     StructuralEvent(
