@@ -13,16 +13,24 @@ class TopologyMechanism(HRMMechanism):
 
     def propose(self, snapshot, external_input: HRMInput, observables, context: TransitionContext) -> MechanismProposal:
         phi = snapshot.state.phi.phi
+        metadata = external_input.metadata or {}
+        requested = bool(
+            metadata.get("topology_events")
+            or metadata.get("topology_add_nodes")
+            or metadata.get("topology_remove_nodes")
+            or metadata.get("topology_rewire")
+        )
+        activation = 1.0 if requested else 0.0
         return MechanismProposal(
             mechanism_id=self.mechanism_id,
             source_state_version=snapshot.source_version,
             read_blocks=self.read_blocks,
             write_blocks=self.write_blocks,
-            activation=0.0,
+            activation=activation,
             delta=BlockDelta(phi=np.zeros_like(phi)),
             dtype=str(phi.dtype),
             device=snapshot.state.device,
-            estimated_cost=0.0,
-            diagnostics={"note": "typed topology events disabled in fixed graph phase"},
+            estimated_cost=0.05 * activation,
+            diagnostics={"note": "topology events requested via metadata" if requested else "no topology request"},
             provenance={"owner": self.mechanism_id},
         )

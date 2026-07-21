@@ -14,6 +14,7 @@ from .mechanisms import (
     MemoryMechanism,
     ReactionMechanism,
     RegionalMechanism,
+    TopologyMechanism,
 )
 from .mechanisms.base import HRMInput
 from .state import HRMState, make_initial_state
@@ -39,6 +40,8 @@ def build_engine(config: HRMTransitionConfig) -> CanonicalTransitionEngine:
         CognitionMechanism(enabled=config.ablations.cognition, gain=config.cognition_gain, guidance_gain=config.guidance_gain),
         HierarchyMechanism(enabled=config.ablations.hierarchy, gain=config.hierarchy_gain),
     ]
+    if config.topology_enabled and config.ablations.is_full_arm():
+        mechanisms.append(TopologyMechanism())
     return CanonicalTransitionEngine(config=config, mechanisms=mechanisms)
 
 

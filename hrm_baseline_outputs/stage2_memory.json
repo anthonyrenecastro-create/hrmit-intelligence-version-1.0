@@ -1,5 +1,5 @@
 {
-  "checksum": "654064cd0c610374aa25d38db059e89ed443d88198794652fe7143006c8023fe",
+  "checksum": "48632db25b2b888049724eb2a85ff49286156a7794c9232feca45a3fd48dd0cf",
   "payload": {
     "schema_version": "1.0",
     "config": {
@@ -25,10 +25,10 @@
     },
     "working": [
       {
-        "memory_id": "a31a6e2455d04a6b9965dfb2ab371217",
+        "memory_id": "bc7286120dc84286a09d6f0f8f63430d",
         "key": "phase",
         "value": "phase: Stage 1 canonical_transition",
-        "timestamp": 1784399079.5250576,
+        "timestamp": 1784400899.0968056,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -74,10 +74,10 @@
         ]
       },
       {
-        "memory_id": "a6b7eb20f4314b36b835a379dcc760ba",
+        "memory_id": "663b8c340fe8468a914e9e9677bb3cf9",
         "key": "candidate",
         "value": "candidate: hrm_core_reference",
-        "timestamp": 1784399079.5252001,
+        "timestamp": 1784400899.0969427,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -123,10 +123,10 @@
         ]
       },
       {
-        "memory_id": "f3897817e674437f9e52b76e4bd19d19",
+        "memory_id": "fd605ca22c364d468e240422ce37774a",
         "key": "config_hash",
         "value": "config_hash: ce1da88bcda09b457a411e14ef1457e0048e3ceb896b9370138ccb1301bf80a7",
-        "timestamp": 1784399079.5253468,
+        "timestamp": 1784400899.0970497,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -172,10 +172,10 @@
         ]
       },
       {
-        "memory_id": "c983f923a9974419ab2d03a16758d02f",
+        "memory_id": "92cd83e1232e438098439b38778be5fa",
         "key": "seed",
         "value": "seed: 0",
-        "timestamp": 1784399079.5254426,
+        "timestamp": 1784400899.0971403,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -221,10 +221,10 @@
         ]
       },
       {
-        "memory_id": "5947d15916c7481187ca0add508f6cf1",
+        "memory_id": "a4915a1d493540dc9fc1b4c810c7ba61",
         "key": "backend",
         "value": "backend: cpu",
-        "timestamp": 1784399079.5255241,
+        "timestamp": 1784400899.0972147,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -270,10 +270,10 @@
         ]
       },
       {
-        "memory_id": "1773fceefe2b418287ce91b5824d5476",
+        "memory_id": "10ee9dd7ab934d669f570f6450ba5d2f",
         "key": "profile",
         "value": "profile: smoke",
-        "timestamp": 1784399079.5256014,
+        "timestamp": 1784400899.0973206,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -319,10 +319,10 @@
         ]
       },
       {
-        "memory_id": "6e5f693fd6b541079acd8786f98103ea",
+        "memory_id": "6f21d1fb17db440da272b1cb07c2da8c",
         "key": "steps",
         "value": "steps: 32",
-        "timestamp": 1784399079.5256736,
+        "timestamp": 1784400899.0974069,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -368,10 +368,10 @@
         ]
       },
       {
-        "memory_id": "19d75dddad0048a2a8defd9fdea109e9",
+        "memory_id": "191112f192a44ef6924e20a1b8ce4dbb",
         "key": "batch",
         "value": "batch: 1",
-        "timestamp": 1784399079.5257456,
+        "timestamp": 1784400899.097483,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -417,10 +417,10 @@
         ]
       },
       {
-        "memory_id": "c51cd74dd5a04908a6ba2390df644ede",
+        "memory_id": "e180dbd480274886b2fa9ef740c0c8e4",
         "key": "perturb_step",
         "value": "perturb_step: 16",
-        "timestamp": 1784399079.5258186,
+        "timestamp": 1784400899.0975583,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -466,10 +466,10 @@
         ]
       },
       {
-        "memory_id": "2d3d300b56e349598750ca90283007bb",
+        "memory_id": "f76e6a23307d4f8da044c3547775714d",
         "key": "perturb_strength",
         "value": "perturb_strength: 1.5",
-        "timestamp": 1784399079.5259058,
+        "timestamp": 1784400899.0976481,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -515,10 +515,10 @@
         ]
       },
       {
-        "memory_id": "97f89192627443e9902d40df4c6fd66c",
+        "memory_id": "1632f895a9684c31a08914556bfa6f8c",
         "key": "did_recover",
         "value": "did_recover: True",
-        "timestamp": 1784399079.526007,
+        "timestamp": 1784400899.097752,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -564,10 +564,10 @@
         ]
       },
       {
-        "memory_id": "8f5c0905679f4824af46fe1a7cbf6b99",
+        "memory_id": "e07d70b4c5a343e0a67c30b8b5631a4e",
         "key": "ledger_pass",
         "value": "ledger_pass: True",
-        "timestamp": 1784399079.5260942,
+        "timestamp": 1784400899.097843,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -613,10 +613,10 @@
         ]
       },
       {
-        "memory_id": "b6aba4eb53c848ad8f39f03ec73efee0",
+        "memory_id": "d821eba6626a45c8b33bca16ae47d732",
         "key": "bounded_pass",
         "value": "bounded_pass: True",
-        "timestamp": 1784399079.5261817,
+        "timestamp": 1784400899.09793,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -662,10 +662,10 @@
         ]
       },
       {
-        "memory_id": "66c7eed368bb435daf4477bc9fcb1eb0",
+        "memory_id": "17a144d197ff4d4e97b188e0ab705715",
         "key": "L_total",
         "value": "metric L_total: 0.02507021650671959",
-        "timestamp": 1784399079.5382924,
+        "timestamp": 1784400899.0980349,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -711,10 +711,10 @@
         ]
       },
       {
-        "memory_id": "f6d9588499274da5aa2403998bfcba83",
+        "memory_id": "1927fa8d4eaa4a86bd1093c81fc12666",
         "key": "baseline_summary",
         "value": "Baseline run summary for phase=Stage 1 canonical_transition candidate=hrm_core_reference with final L_total=0.02507021650671959",
-        "timestamp": 1784399079.5384526,
+        "timestamp": 1784400899.0981672,
         "sequence_step": 0,
         "source": "stage2_baseline",
         "importance": 0.7,
@@ -763,10 +763,10 @@
       "schema_version": "1.0",
       "items": [
         {
-          "memory_id": "a31a6e2455d04a6b9965dfb2ab371217",
+          "memory_id": "bc7286120dc84286a09d6f0f8f63430d",
           "key": "phase",
           "value": "phase: Stage 1 canonical_transition",
-          "timestamp": 1784399079.5250576,
+          "timestamp": 1784400899.0968056,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -812,10 +812,10 @@
           ]
         },
         {
-          "memory_id": "a6b7eb20f4314b36b835a379dcc760ba",
+          "memory_id": "663b8c340fe8468a914e9e9677bb3cf9",
           "key": "candidate",
           "value": "candidate: hrm_core_reference",
-          "timestamp": 1784399079.5252001,
+          "timestamp": 1784400899.0969427,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -861,10 +861,10 @@
           ]
         },
         {
-          "memory_id": "f3897817e674437f9e52b76e4bd19d19",
+          "memory_id": "fd605ca22c364d468e240422ce37774a",
           "key": "config_hash",
           "value": "config_hash: ce1da88bcda09b457a411e14ef1457e0048e3ceb896b9370138ccb1301bf80a7",
-          "timestamp": 1784399079.5253468,
+          "timestamp": 1784400899.0970497,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -910,10 +910,10 @@
           ]
         },
         {
-          "memory_id": "c983f923a9974419ab2d03a16758d02f",
+          "memory_id": "92cd83e1232e438098439b38778be5fa",
           "key": "seed",
           "value": "seed: 0",
-          "timestamp": 1784399079.5254426,
+          "timestamp": 1784400899.0971403,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -959,10 +959,10 @@
           ]
         },
         {
-          "memory_id": "5947d15916c7481187ca0add508f6cf1",
+          "memory_id": "a4915a1d493540dc9fc1b4c810c7ba61",
           "key": "backend",
           "value": "backend: cpu",
-          "timestamp": 1784399079.5255241,
+          "timestamp": 1784400899.0972147,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1008,10 +1008,10 @@
           ]
         },
         {
-          "memory_id": "1773fceefe2b418287ce91b5824d5476",
+          "memory_id": "10ee9dd7ab934d669f570f6450ba5d2f",
           "key": "profile",
           "value": "profile: smoke",
-          "timestamp": 1784399079.5256014,
+          "timestamp": 1784400899.0973206,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1057,10 +1057,10 @@
           ]
         },
         {
-          "memory_id": "6e5f693fd6b541079acd8786f98103ea",
+          "memory_id": "6f21d1fb17db440da272b1cb07c2da8c",
           "key": "steps",
           "value": "steps: 32",
-          "timestamp": 1784399079.5256736,
+          "timestamp": 1784400899.0974069,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1106,10 +1106,10 @@
           ]
         },
         {
-          "memory_id": "19d75dddad0048a2a8defd9fdea109e9",
+          "memory_id": "191112f192a44ef6924e20a1b8ce4dbb",
           "key": "batch",
           "value": "batch: 1",
-          "timestamp": 1784399079.5257456,
+          "timestamp": 1784400899.097483,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1155,10 +1155,10 @@
           ]
         },
         {
-          "memory_id": "c51cd74dd5a04908a6ba2390df644ede",
+          "memory_id": "e180dbd480274886b2fa9ef740c0c8e4",
           "key": "perturb_step",
           "value": "perturb_step: 16",
-          "timestamp": 1784399079.5258186,
+          "timestamp": 1784400899.0975583,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1204,10 +1204,10 @@
           ]
         },
         {
-          "memory_id": "2d3d300b56e349598750ca90283007bb",
+          "memory_id": "f76e6a23307d4f8da044c3547775714d",
           "key": "perturb_strength",
           "value": "perturb_strength: 1.5",
-          "timestamp": 1784399079.5259058,
+          "timestamp": 1784400899.0976481,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1253,10 +1253,10 @@
           ]
         },
         {
-          "memory_id": "97f89192627443e9902d40df4c6fd66c",
+          "memory_id": "1632f895a9684c31a08914556bfa6f8c",
           "key": "did_recover",
           "value": "did_recover: True",
-          "timestamp": 1784399079.526007,
+          "timestamp": 1784400899.097752,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1302,10 +1302,10 @@
           ]
         },
         {
-          "memory_id": "8f5c0905679f4824af46fe1a7cbf6b99",
+          "memory_id": "e07d70b4c5a343e0a67c30b8b5631a4e",
           "key": "ledger_pass",
           "value": "ledger_pass: True",
-          "timestamp": 1784399079.5260942,
+          "timestamp": 1784400899.097843,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1351,10 +1351,10 @@
           ]
         },
         {
-          "memory_id": "b6aba4eb53c848ad8f39f03ec73efee0",
+          "memory_id": "d821eba6626a45c8b33bca16ae47d732",
           "key": "bounded_pass",
           "value": "bounded_pass: True",
-          "timestamp": 1784399079.5261817,
+          "timestamp": 1784400899.09793,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1400,10 +1400,10 @@
           ]
         },
         {
-          "memory_id": "66c7eed368bb435daf4477bc9fcb1eb0",
+          "memory_id": "17a144d197ff4d4e97b188e0ab705715",
           "key": "L_total",
           "value": "metric L_total: 0.02507021650671959",
-          "timestamp": 1784399079.5382924,
+          "timestamp": 1784400899.0980349,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,
@@ -1449,10 +1449,10 @@
           ]
         },
         {
-          "memory_id": "f6d9588499274da5aa2403998bfcba83",
+          "memory_id": "1927fa8d4eaa4a86bd1093c81fc12666",
           "key": "baseline_summary",
           "value": "Baseline run summary for phase=Stage 1 canonical_transition candidate=hrm_core_reference with final L_total=0.02507021650671959",
-          "timestamp": 1784399079.5384526,
+          "timestamp": 1784400899.0981672,
           "sequence_step": 0,
           "source": "stage2_baseline",
           "importance": 0.7,

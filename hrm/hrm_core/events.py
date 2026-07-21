@@ -59,4 +59,74 @@ def propose_events(
             )
         )
 
+    add_nodes = int(metadata.get("topology_add_nodes", 0) or 0)
+    remove_nodes = int(metadata.get("topology_remove_nodes", 0) or 0)
+    rewire = bool(metadata.get("topology_rewire", False))
+    topology_events = metadata.get("topology_events")
+
+    if add_nodes > 0:
+        events.append(
+            StructuralEvent(
+                event_id=f"topology_add_step_{context.step}",
+                event_type="topology_add_nodes",
+                block="T",
+                accepted=False,
+                reason="proposed_topology_add_nodes",
+                priority=20,
+                magnitude=float(add_nodes),
+                metadata={"add_nodes": add_nodes},
+            )
+        )
+
+    if remove_nodes > 0:
+        events.append(
+            StructuralEvent(
+                event_id=f"topology_remove_step_{context.step}",
+                event_type="topology_remove_nodes",
+                block="T",
+                accepted=False,
+                reason="proposed_topology_remove_nodes",
+                priority=19,
+                magnitude=float(remove_nodes),
+                metadata={"remove_nodes": remove_nodes},
+            )
+        )
+
+    if rewire:
+        events.append(
+            StructuralEvent(
+                event_id=f"topology_rewire_step_{context.step}",
+                event_type="topology_rewire_ring",
+                block="T",
+                accepted=False,
+                reason="proposed_topology_rewire",
+                priority=18,
+                magnitude=1.0,
+                metadata={"rewire": True},
+            )
+        )
+
+    if isinstance(topology_events, (list, tuple)):
+        for index, item in enumerate(topology_events):
+            if not isinstance(item, dict):
+                continue
+            event_type = str(item.get("event_type", "")).strip()
+            if event_type not in {"topology_add_nodes", "topology_remove_nodes", "topology_rewire_ring"}:
+                continue
+            payload = dict(item)
+            priority = int(payload.get("priority", 15))
+            magnitude = float(payload.get("magnitude", 1.0))
+            events.append(
+                StructuralEvent(
+                    event_id=f"topology_typed_{event_type}_step_{context.step}_{index}",
+                    event_type=event_type,
+                    block="T",
+                    accepted=False,
+                    reason="proposed_topology_typed_event",
+                    priority=priority,
+                    magnitude=magnitude,
+                    metadata=payload,
+                )
+            )
+
     return tuple(sorted(events, key=lambda event: (-event.priority, event.event_id)))

@@ -24,6 +24,7 @@ from hrm.hrm_core import (
     state_digest,
     state_from_dict,
     state_to_dict,
+    topology_enabled_config,
 )
 from hrm.hrm_core.invariants import validate_state
 from hrm.hrm_core.mechanisms.base import HRMInput
@@ -215,8 +216,11 @@ def _run_governed_text(config: ValidationConfig, artifact_dir: Path) -> dict[str
         replay_hash = ""
 
     drive = _text_drive(config.request_text, config.node_count, config.channels)
-    base_engine = build_engine(HRMTransitionConfig())
-    ablated_engine = build_engine(HRMTransitionConfig(ablations=MechanismAblations(diffusion=False)))
+    full_topology_config = topology_enabled_config()
+    base_engine = build_engine(full_topology_config)
+    ablated_engine = build_engine(
+        topology_enabled_config(ablations=MechanismAblations(diffusion=False))
+    )
     ablation_error: dict[str, Any] | None = None
     try:
         base_transition = base_engine.step(initial_state, HRMInput(field_drive=drive, metadata={"memory_query": "validation"}))
@@ -229,6 +233,57 @@ def _run_governed_text(config: ValidationConfig, artifact_dir: Path) -> dict[str
         divergence = 0.0
         base_activation = 0.0
         ablated_activation = 0.0
+
+    topology_probe_error: dict[str, Any] | None = None
+    topology_probe: dict[str, Any]
+    try:
+        topology_step = base_engine.step(
+            state_from_dict(state_to_dict(initial_state)),
+            HRMInput(
+                field_drive=drive,
+                metadata={
+                    "memory_query": "validation_topology",
+                    "topology_add_nodes": 1,
+                    "topology_rewire": True,
+                },
+            ),
+        )
+        topology_phi_transport = next(
+            (record for record in topology_step.ledger.transport_records if record.block == "Phi"),
+            None,
+        )
+        topology_probe = {
+            "before_nodes": initial_state.topology.node_count,
+            "after_nodes": topology_step.state.topology.node_count,
+            "before_topology_version": initial_state.topology.version,
+            "after_topology_version": topology_step.state.topology.version,
+            "accepted_topology_events": [
+                event.event_type
+                for event in topology_step.ledger.accepted_events
+                if event.block == "T"
+            ],
+            "geometry_shape_after": list(topology_step.state.geometry.laplacian.shape),
+            "ledger_max_rel_error": float(topology_step.ledger.max_rel_reconstruction_error),
+            "phi_transport_after_shape": list(topology_phi_transport.after_shape) if topology_phi_transport else None,
+            "phi_transport_new_to_old": list(topology_phi_transport.new_to_old_index_map) if topology_phi_transport else None,
+            "full_arm_mechanisms": [mech.mechanism_id for mech in base_engine.mechanisms],
+            "ablated_arm_mechanisms": [mech.mechanism_id for mech in ablated_engine.mechanisms],
+        }
+    except Exception as error:
+        topology_probe_error = {"error": type(error).__name__, "message": str(error)}
+        topology_probe = {
+            "before_nodes": initial_state.topology.node_count,
+            "after_nodes": initial_state.topology.node_count,
+            "before_topology_version": initial_state.topology.version,
+            "after_topology_version": initial_state.topology.version,
+            "accepted_topology_events": [],
+            "geometry_shape_after": list(initial_state.geometry.laplacian.shape),
+            "ledger_max_rel_error": float("inf"),
+            "phi_transport_after_shape": None,
+            "phi_transport_new_to_old": None,
+            "full_arm_mechanisms": [mech.mechanism_id for mech in base_engine.mechanisms],
+            "ablated_arm_mechanisms": [mech.mechanism_id for mech in ablated_engine.mechanisms],
+        }
 
     failing_runtime = _make_runtime(config, artifact_dir / "failure_checkpoints")
     failing_runtime.providers["mock_timeout"] = FailingProvider()
@@ -286,6 +341,10 @@ def _run_governed_text(config: ValidationConfig, artifact_dir: Path) -> dict[str
             "ablated_activation": ablated_activation,
             "error": ablation_error,
         },
+        "topology_probe": {
+            **topology_probe,
+            "error": topology_probe_error,
+        },
         "failure_injection": {
             "model_failure_response": getattr(failing_result, "response_text", ""),
             "model_failure_provider": getattr(failing_result, "provider_used", None),
@@ -341,6 +400,25 @@ def run_validation(config: ValidationConfig) -> dict[str, Any]:
                 "replay_ok": report["replay"]["matches"],
                 "activation_ok": report["ablation"]["base_activation"] > 0.0,
                 "divergence_ok": report["ablation"]["diffusion_disabled_divergence"] > 1e-6,
+                "ablation_integrity_ok": (
+                    "topology" in report["topology_probe"]["full_arm_mechanisms"]
+                    and "topology" not in report["topology_probe"]["ablated_arm_mechanisms"]
+                ),
+                "G1_topology_mutation_ok": (
+                    report["topology_probe"]["after_nodes"] > report["topology_probe"]["before_nodes"]
+                    and report["topology_probe"]["after_topology_version"] > report["topology_probe"]["before_topology_version"]
+                    and bool(report["topology_probe"]["accepted_topology_events"])
+                ),
+                "G2_transport_map_ok": (
+                    report["topology_probe"]["phi_transport_after_shape"] is not None
+                    and report["topology_probe"]["phi_transport_after_shape"][0] == report["topology_probe"]["after_nodes"]
+                    and report["topology_probe"]["phi_transport_new_to_old"] is not None
+                    and any(index is None for index in report["topology_probe"]["phi_transport_new_to_old"])
+                ),
+                "structural_ledger_gate_ok": (
+                    report["topology_probe"]["ledger_max_rel_error"] <= config.ledger_tolerance
+                    and report["topology_probe"]["geometry_shape_after"][0] == report["topology_probe"]["after_nodes"]
+                ),
                 "model_failure_safe": bool(report["failure_injection"]["model_failure_response"]),
                 "state_failure_safe": report["failure_injection"]["state_failure_detected"],
                 "sovereignty_ok": report["sovereignty"]["provider_used"] == "mock_deterministic",

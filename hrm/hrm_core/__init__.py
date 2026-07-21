@@ -1,4 +1,4 @@
-from .configuration import HRMTransitionConfig, MechanismAblations
+from .configuration import HRMTransitionConfig, MechanismAblations, topology_enabled_config
 from .experiments import build_engine, run_sequence_memory, run_spatial_reconstruction
 from .snapshot import HRMSnapshot, freeze_state
 from .state import HRMState, make_initial_state, state_digest, state_from_dict, state_to_dict
@@ -8,6 +8,7 @@ __all__ = [
     "HRMState",
     "HRMSnapshot",
     "HRMTransitionConfig",
+    "topology_enabled_config",
     "MechanismAblations",
     "CanonicalTransitionEngine",
     "TransitionResult",

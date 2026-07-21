@@ -100,7 +100,41 @@ def test_event_handling_advances_memory_write_head_and_records_transport() -> No
     assert result.ledger.accepted_events
     assert any(event.event_type == "memory_write_head" and event.accepted for event in result.ledger.accepted_events)
     assert result.state.memory.write_index == (state.memory.write_index + 1) % state.memory.capacity
-    assert all(record.mode == "identity" for record in result.ledger.transport_records)
+    assert all(record.mode == "index_map" for record in result.ledger.transport_records)
+    assert all(record.old_to_new_index_map is not None or record.block == "C" for record in result.ledger.transport_records)
+
+
+def test_topology_mechanism_registered_only_in_full_arm() -> None:
+    full_config = HRMTransitionConfig(topology_enabled=True)
+    ablated_config = HRMTransitionConfig(topology_enabled=True, ablations=MechanismAblations(diffusion=False))
+
+    full_engine = build_engine(full_config)
+    ablated_engine = build_engine(ablated_config)
+
+    assert any(mech.mechanism_id == "topology" for mech in full_engine.mechanisms)
+    assert all(mech.mechanism_id != "topology" for mech in ablated_engine.mechanisms)
+
+
+def test_topology_events_mutate_state_geometry_and_transport_maps() -> None:
+    config = HRMTransitionConfig(topology_enabled=True)
+    engine = build_engine(config)
+    state = make_initial_state(node_count=12, channels=4, latent_dim=8, memory_capacity=6, seed=31)
+
+    result = engine.step(
+        state,
+        HRMInput(
+            field_drive=_drive(1, nodes=12, channels=4, horizon=8),
+            metadata={"memory_query": "topology_path", "topology_add_nodes": 1},
+        ),
+    )
+
+    assert any(event.event_type == "topology_add_nodes" and event.accepted for event in result.ledger.accepted_events)
+    assert result.state.topology.node_count == state.topology.node_count + 1
+    assert result.state.topology.version == state.topology.version + 1
+    assert result.state.geometry.laplacian.shape == (result.state.topology.node_count, result.state.topology.node_count)
+    phi_transport = next(record for record in result.ledger.transport_records if record.block == "Phi")
+    assert phi_transport.after_shape[0] == state.topology.node_count + 1
+    assert phi_transport.new_to_old_index_map is not None and any(index is None for index in phi_transport.new_to_old_index_map)
 
 
 def test_diffusion_ablation_changes_trajectory() -> None:

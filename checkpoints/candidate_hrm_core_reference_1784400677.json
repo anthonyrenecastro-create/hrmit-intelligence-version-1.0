@@ -1,0 +1,9 @@
+{
+  "checkpoint_id": "hrm_core_reference",
+  "held_out_accuracy": 0.02507021650671959,
+  "prior_task_recall": 1.0,
+  "safety_bias": 0.4,
+  "params_fusion": 0.0008,
+  "params_calibration": 0.0008,
+  "params_memory_retrieval": 0.0008
+}

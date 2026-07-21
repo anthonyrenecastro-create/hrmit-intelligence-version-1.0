@@ -11,6 +11,18 @@ class MechanismAblations:
     memory: bool = True
     cognition: bool = True
     hierarchy: bool = True
+    topology: bool = True
+
+    def is_full_arm(self) -> bool:
+        return (
+            self.input_projection
+            and self.diffusion
+            and self.reaction
+            and self.memory
+            and self.cognition
+            and self.hierarchy
+            and self.topology
+        )
 
 
 @dataclass(frozen=True)
@@ -30,4 +42,12 @@ class HRMTransitionConfig:
     max_field_norm: float = 128.0
     min_field_variance: float = 1e-7
     deterministic_mode: bool = True
+    topology_enabled: bool = False
+    topology_max_add_nodes: int = 1
+    topology_max_remove_nodes: int = 1
+    topology_metric_scale_step: float = 0.05
     ablations: MechanismAblations = field(default_factory=MechanismAblations)
+
+
+def topology_enabled_config(**overrides: object) -> HRMTransitionConfig:
+    return HRMTransitionConfig(topology_enabled=True, **overrides)
