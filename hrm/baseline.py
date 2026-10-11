@@ -329,6 +329,7 @@ class Params(NamedTuple):
     cognition_to_field: jax.Array
     hierarchy_mix: jax.Array
     predictor: jax.Array
+    output_head: jax.Array
 
 
 class Inputs(NamedTuple):
@@ -418,13 +419,14 @@ def rms_batch(x: jax.Array) -> jax.Array:
 
 
 def make_params(key: jax.Array, shape: ShapeConfig) -> Params:
-    k1, k2, k3, k4 = random.split(key, 4)
+    k1, k2, k3, k4, k5 = random.split(key, 5)
     scale = 1.0 / jnp.sqrt(shape.channels)
     return Params(
         field_to_cognition=random.normal(k1, (shape.channels, shape.cognitive_dim), dtype=jnp.float32) * scale,
         cognition_to_field=random.normal(k2, (shape.cognitive_dim, shape.channels), dtype=jnp.float32) / jnp.sqrt(shape.cognitive_dim),
         hierarchy_mix=random.normal(k3, (shape.channels, shape.channels), dtype=jnp.float32) * scale,
         predictor=random.normal(k4, (shape.cognitive_dim, shape.channels), dtype=jnp.float32) / jnp.sqrt(shape.cognitive_dim),
+        output_head=jnp.eye(shape.channels, dtype=jnp.float32) + 0.01 * random.normal(k5, (shape.channels, shape.channels), dtype=jnp.float32),
     )
 
 
@@ -540,7 +542,7 @@ def hrm_step(state: State, inp: tuple[jax.Array, jax.Array, jax.Array], params: 
         perturb_norm=rms_batch(a_perturb),
         correction_norm=rms_batch(a_correction),
         ledger_relative_error=rel_err,
-        prediction_mse=jnp.mean((safe_phi - target_t) ** 2, axis=(1, 2, 3)),
+        prediction_mse=jnp.mean((jnp.einsum("bhwc,cd->bhwd", safe_phi, params.output_head) - target_t) ** 2, axis=(1, 2, 3)),
         field_variance=jnp.var(safe_phi, axis=(1, 2, 3)),
         coherence=1.0 / (1.0 + disagreement),
         active_fraction=jnp.mean(next_allocation, axis=(1, 2, 3)),
