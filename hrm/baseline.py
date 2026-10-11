@@ -330,6 +330,8 @@ class Params(NamedTuple):
     hierarchy_mix: jax.Array
     predictor: jax.Array
     output_head: jax.Array
+    geo_tensor: jax.Array      # (channels, 2, 2) anisotropic diffusion tensor (G)
+    topo_kernel: jax.Array     # (channels, 5, 5) learnable long-range kernel (T)
 
 
 class Inputs(NamedTuple):
@@ -346,11 +348,14 @@ class Ablation(NamedTuple):
     guidance: float = 1.0
     hierarchy: float = 1.0
     allocation: float = 1.0
+    geometry: float = 1.0
+    topology: float = 1.0
 
 
 class StepLedger(NamedTuple):
     input_norm: jax.Array
     diffusion_norm: jax.Array
+    topo_norm: jax.Array
     reaction_norm: jax.Array
     memory_norm: jax.Array
     cognition_norm: jax.Array
@@ -419,14 +424,21 @@ def rms_batch(x: jax.Array) -> jax.Array:
 
 
 def make_params(key: jax.Array, shape: ShapeConfig) -> Params:
-    k1, k2, k3, k4, k5 = random.split(key, 5)
+    k1, k2, k3, k4, k5, k6, k7 = random.split(key, 7)
     scale = 1.0 / jnp.sqrt(shape.channels)
+    # Geometry: init to isotropic (identity scaled), learns anisotropy
+    geo_init = jnp.tile(jnp.eye(2, dtype=jnp.float32)[None, :, :], (shape.channels, 1, 1)) * 0.5
+    # Topology: init to local (center=1, rest=0), learns long-range
+    topo_init = jnp.zeros((shape.channels, 5, 5), dtype=jnp.float32)
+    topo_init = topo_init.at[:, 2, 2].set(1.0)
     return Params(
         field_to_cognition=random.normal(k1, (shape.channels, shape.cognitive_dim), dtype=jnp.float32) * scale,
         cognition_to_field=random.normal(k2, (shape.cognitive_dim, shape.channels), dtype=jnp.float32) / jnp.sqrt(shape.cognitive_dim),
         hierarchy_mix=random.normal(k3, (shape.channels, shape.channels), dtype=jnp.float32) * scale,
         predictor=random.normal(k4, (shape.cognitive_dim, shape.channels), dtype=jnp.float32) / jnp.sqrt(shape.cognitive_dim),
         output_head=jnp.eye(shape.channels, dtype=jnp.float32) + 0.01 * random.normal(k5, (shape.channels, shape.channels), dtype=jnp.float32),
+        geo_tensor=geo_init + 0.01 * random.normal(k6, (shape.channels, 2, 2), dtype=jnp.float32),
+        topo_kernel=topo_init + 0.01 * random.normal(k7, (shape.channels, 5, 5), dtype=jnp.float32),
     )
 
 
@@ -500,7 +512,35 @@ def hrm_step(state: State, inp: tuple[jax.Array, jax.Array, jax.Array], params: 
     next_allocation = ablation.allocation * soft_alloc[:, None, None, :] + (1.0 - ablation.allocation) * jnp.ones_like(allocation)
 
     a_input = dyn.dt * dyn.input_gain * drive_t * next_allocation
-    a_diff = -dyn.dt * dyn.diffusion * laplacian_2d(phi) * next_allocation * ablation.diffusion
+    # G: Adaptive geometry — anisotropic diffusion via learned per-channel tensor.
+    # When ablation.geometry=0, falls back to isotropic laplacian.
+    dx2 = jnp.roll(phi, 1, axis=1) - 2.0 * phi + jnp.roll(phi, -1, axis=1)
+    dy2 = jnp.roll(phi, 1, axis=2) - 2.0 * phi + jnp.roll(phi, -1, axis=2)
+    # geo_tensor (c,2,2): [xx, xy; yx, yy] weights per channel
+    aniso_lap = (
+        params.geo_tensor[:, 0, 0][None, None, None, :] * dx2
+        + params.geo_tensor[:, 1, 1][None, None, None, :] * dy2
+        + params.geo_tensor[:, 0, 1][None, None, None, :] * (
+            jnp.roll(jnp.roll(phi, 1, axis=1), 1, axis=2)
+            - jnp.roll(jnp.roll(phi, 1, axis=1), -1, axis=2)
+            - jnp.roll(jnp.roll(phi, -1, axis=1), 1, axis=2)
+            + jnp.roll(jnp.roll(phi, -1, axis=1), -1, axis=2)
+        ) * 0.25
+    )
+    iso_lap = laplacian_2d(phi)
+    mixed_lap = ablation.geometry * aniso_lap + (1.0 - ablation.geometry) * iso_lap
+    a_diff = -dyn.dt * dyn.diffusion * mixed_lap * next_allocation * ablation.diffusion
+    # T: Adaptive topology — learnable 5x5 long-range kernel per channel.
+    # Center is initialized to 1 (local), off-center learns long-range edges.
+    # When ablation.topology=0, this term vanishes.
+    topo_conv = jax.lax.conv_general_dilated(
+        phi.transpose(0, 3, 1, 2),  # (b, c, h, w)
+        params.topo_kernel[:, None, :, :],  # (c, 1, 5, 5) depthwise
+        window_strides=(1, 1), padding="SAME",
+        dimension_numbers=("NCHW", "OIHW", "NCHW"),
+        feature_group_count=shape.channels,
+    ).transpose(0, 2, 3, 1)  # back to (b, h, w, c)
+    a_topo = dyn.dt * dyn.diffusion * (topo_conv - phi) * next_allocation * ablation.topology
     reaction = dyn.reaction_gain * phi - dyn.reaction_saturation * phi ** 3
     a_react = dyn.dt * reaction * next_allocation * ablation.reaction
     a_memory = dyn.dt * dyn.memory_gain * (memory - phi) * next_allocation * ablation.memory
@@ -512,7 +552,7 @@ def hrm_step(state: State, inp: tuple[jax.Array, jax.Array, jax.Array], params: 
     a_hierarchy = dyn.dt * dyn.hierarchy_gain * (h_mixed - phi) * next_allocation * ablation.hierarchy
     a_perturb = perturb_t
 
-    proposed_phi = phi + a_input + a_diff + a_react + a_memory + a_cognition + a_guidance + a_hierarchy + a_perturb
+    proposed_phi = phi + a_input + a_diff + a_topo + a_react + a_memory + a_cognition + a_guidance + a_hierarchy + a_perturb
     safe_phi = bounded(proposed_phi, dyn.field_bound)
     a_correction = safe_phi - proposed_phi
 
@@ -525,7 +565,7 @@ def hrm_step(state: State, inp: tuple[jax.Array, jax.Array, jax.Array], params: 
     next_state = State(safe_phi, next_memory, next_cognition, next_hierarchy, next_allocation)
 
     observed_delta = safe_phi - phi
-    reconstructed_delta = a_input + a_diff + a_react + a_memory + a_cognition + a_guidance + a_hierarchy + a_perturb + a_correction
+    reconstructed_delta = a_input + a_diff + a_topo + a_react + a_memory + a_cognition + a_guidance + a_hierarchy + a_perturb + a_correction
     residual = observed_delta - reconstructed_delta
     rel_err = rms_batch(residual) / (rms_batch(observed_delta) + 1e-8)
 
@@ -534,6 +574,7 @@ def hrm_step(state: State, inp: tuple[jax.Array, jax.Array, jax.Array], params: 
     ledger = StepLedger(
         input_norm=rms_batch(a_input),
         diffusion_norm=rms_batch(a_diff),
+        topo_norm=rms_batch(a_topo),
         reaction_norm=rms_batch(a_react),
         memory_norm=rms_batch(a_memory),
         cognition_norm=rms_batch(a_cognition),
@@ -640,7 +681,7 @@ def block_until_ready(tree):
 
 def mechanism_means(ledger: StepLedger) -> dict[str, float]:
     names = ("input", "diffusion", "reaction", "memory", "cognition", "guidance", "hierarchy", "perturb", "correction")
-    arrays = (ledger.input_norm, ledger.diffusion_norm, ledger.reaction_norm, ledger.memory_norm, ledger.cognition_norm, ledger.guidance_norm, ledger.hierarchy_norm, ledger.perturb_norm, ledger.correction_norm)
+    arrays = (ledger.input_norm, ledger.diffusion_norm, ledger.topo_norm, ledger.reaction_norm, ledger.memory_norm, ledger.cognition_norm, ledger.guidance_norm, ledger.hierarchy_norm, ledger.perturb_norm, ledger.correction_norm)
     return {name: float(np.asarray(jnp.mean(arr))) for name, arr in zip(names, arrays)}
 
 
