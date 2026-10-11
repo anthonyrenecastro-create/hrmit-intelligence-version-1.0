@@ -21,10 +21,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest jsonschema httpx "numpy<2" scipy pillow "jax[cpu]"
+          pip install pytest jsonschema httpx "numpy>=2.1" "scipy>=1.14" pillow "jax[cpu]"
       - name: Run tests
-        run: |
-          set -o pipefail
-          pytest -v tests/test_stage5_stage6.py tests/test_runner_smoke.py tests/test_stage4_multimodal.py tests/test_stage6_learning.py 2>&1 | tee /tmp/pytest.log | tail -50
-          echo "=== FAILED TESTS ==="
-          grep -E "^FAILED|^ERROR" /tmp/pytest.log || echo "(none found in log tail)" 
+        run: pytest -q tests/test_stage5_stage6.py tests/test_runner_smoke.py tests/test_stage4_multimodal.py tests/test_stage6_learning.py
