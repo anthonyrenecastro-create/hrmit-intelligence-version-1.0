@@ -45,10 +45,10 @@ def test_stage1_training_reduces_validation_loss_and_exceeds_recurrent_baseline(
     pytest.importorskip("jax")
     from hrm.baseline import BASELINE_CONFIG, evaluate_non_hrm_baseline, train_baseline_pipeline
 
-    record = train_baseline_pipeline(seed=0, epochs=20, learning_rate=0.1, save_artifacts=False, output_dir=tmp_path)
+    record = train_baseline_pipeline(seed=0, epochs=100, learning_rate=0.1, save_artifacts=False, output_dir=tmp_path)
 
-    assert record["training_epochs"] == 20
-    assert len(record["training_history"]) == 20
+    assert record["training_epochs"] == 100
+    assert len(record["training_history"]) == 100
     assert record["validation_loss_after"] <= record["validation_loss_before"]
     assert record["validation_improvement"] >= 0.0
     assert record["hrm_vs_non_hrm"] is True
