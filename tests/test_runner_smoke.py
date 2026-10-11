@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 
 def test_runner_stage4_and_stage5_smoke() -> None:
     repo_root = Path(__file__).resolve().parent.parent
-    python_executable = repo_root / ".venv" / "bin" / "python"
+    python_executable = Path(sys.executable)
 
     result4 = subprocess.run(
         [str(python_executable), "hrm/runner.py", "--stage", "4"],
