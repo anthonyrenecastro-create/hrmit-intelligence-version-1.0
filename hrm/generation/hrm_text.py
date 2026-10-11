@@ -74,7 +74,7 @@ class HRMCognitionText:
     def set_params(self, p):
         self.embed, self.W_gates, self.b_gates, self.W_hier, self.W_out = p
 
-    def train(self, text: str, epochs: int = 200, seq_len: int = 64, lr: float = 0.01, seed: int = 0):
+    def train(self, text: str, epochs: int = 200, seq_len: int = 64, lr: float = 0.01, seed: int = 0, batch_size: int = 32):
         data = np.frombuffer(text.encode("utf-8", errors="replace"), dtype=np.uint8).astype(np.int32)
         if len(data) < seq_len + 1:
             raise ValueError(f"Need {seq_len+1} bytes, got {len(data)}")
@@ -82,14 +82,23 @@ class HRMCognitionText:
         history = []
         for epoch in range(epochs):
             key, skey = random.split(key)
-            start = int(random.randint(skey, (), 0, len(data) - seq_len))
-            window = jnp.asarray(data[start:start + seq_len + 1])
-            inp, tgt = window[:-1], window[1:]
+            # Sample a batch of windows
+            starts = random.randint(skey, (batch_size,), 0, len(data) - seq_len)
+            batch_inp, batch_tgt = [], []
+            for s in starts:
+                s = int(s)
+                window = jnp.asarray(data[s:s + seq_len + 1])
+                batch_inp.append(window[:-1])
+                batch_tgt.append(window[1:])
+            inp = jnp.stack(batch_inp)  # (B, T)
+            tgt = jnp.stack(batch_tgt)  # (B, T)
             def loss_fn(p):
                 self.set_params(p)
-                logits = self._forward(inp)
+                # vmap over batch
+                logits = jax.vmap(self._forward)(inp)  # (B, T, V)
                 logp = jax.nn.log_softmax(logits, axis=-1)
-                return jnp.mean(-jnp.take_along_axis(logp, tgt[:, None], axis=-1).squeeze(-1))
+                nll = -jnp.take_along_axis(logp, tgt[:, :, None], axis=-1).squeeze(-1)
+                return jnp.mean(nll)
             p = self.params()
             lv, grads = jax.value_and_grad(loss_fn)(p)
             # Gradient clipping
