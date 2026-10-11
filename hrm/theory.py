@@ -20,6 +20,7 @@ from hrm.baseline import (
 )
 from hrm.hrm_core import HRMTransitionConfig, run_sequence_memory, run_spatial_reconstruction, state_digest
 from hrm.integration import IntegratedRuntime, MockDeterministicProvider, OllamaProvider, OperatingMode
+from hrm.generation.provider import HRMProvider
 from hrm.distributed import DistributedCoordinator, RoleSpecialistModule, TaskGraph
 from hrm.distributed.types import CognitiveTask as DistributedTask
 from hrm.memory import LongTermMemory, MemoryQuery, MemorySystem, Planner, summarize_memory
@@ -271,7 +272,7 @@ class HRMTheory:
         output_dir: Path | str = "hrm_baseline_outputs",
         use_governed_text: bool = False,
         governed_input: str = "Summarize current objective and next safe action.",
-        inference_provider: str = "mock_deterministic",
+        inference_provider: str = "hrm_local",
     ) -> dict[str, Any]:
         if baseline_record is None:
             stage1 = self._run_stage_1(seed=0, output_dir=output_dir)
@@ -331,6 +332,7 @@ class HRMTheory:
                 session_id="stage2_governed",
                 checkpoint_dir=Path(output_dir) / "stage2_governed_checkpoints",
             )
+            runtime.register_provider(HRMProvider())
             runtime.register_provider(MockDeterministicProvider())
             runtime.register_provider(OllamaProvider())
             governed = runtime.process_text_request(governed_input)
@@ -353,7 +355,7 @@ class HRMTheory:
         api_endpoint: str = "status",
         api_payload: dict[str, Any] | None = None,
         output_dir: Path | str = "hrm_baseline_outputs",
-        inference_provider: str = "mock_deterministic",
+        inference_provider: str = "hrm_local",
     ) -> dict[str, Any]:
         if baseline_record is None:
             stage1 = self._run_stage_1(seed=0, output_dir=output_dir)
@@ -392,6 +394,7 @@ class HRMTheory:
             session_id="stage3_governed",
             checkpoint_dir=Path(output_dir) / "stage3_governed_checkpoints",
         )
+        runtime.register_provider(HRMProvider())
         runtime.register_provider(MockDeterministicProvider())
         runtime.register_provider(OllamaProvider())
 
@@ -448,7 +451,7 @@ class HRMTheory:
         modality_query: str = "Text",
         include_modalities: list[str] | None = None,
         use_governed_multimodal: bool = False,
-        inference_provider: str = "mock_deterministic",
+        inference_provider: str = "hrm_local",
         output_dir: Path | str = "hrm_baseline_outputs",
     ) -> dict[str, Any]:
         pipeline = MultimodalPipeline()
@@ -517,6 +520,7 @@ class HRMTheory:
                 session_id="stage4_governed",
                 checkpoint_dir=Path(output_dir) / "stage4_governed_checkpoints",
             )
+            runtime.register_provider(HRMProvider())
             runtime.register_provider(MockDeterministicProvider())
             runtime.register_provider(OllamaProvider())
 
@@ -555,7 +559,7 @@ class HRMTheory:
         consensus_query: str = "Coordinate distributed HRM reasoning and planning",
         agent_roles: list[str] | None = None,
         use_governed_consensus: bool = False,
-        inference_provider: str = "mock_deterministic",
+        inference_provider: str = "hrm_local",
         output_dir: Path | str = "hrm_baseline_outputs",
     ) -> dict[str, Any]:
         if baseline_record is None:
@@ -598,6 +602,7 @@ class HRMTheory:
                 session_id="stage5_governed",
                 checkpoint_dir=Path(output_dir) / "stage5_governed_checkpoints",
             )
+            runtime.register_provider(HRMProvider())
             runtime.register_provider(MockDeterministicProvider())
             runtime.register_provider(OllamaProvider())
 
