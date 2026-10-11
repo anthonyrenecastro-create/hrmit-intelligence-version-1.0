@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--plan-query", type=str, default="Improve HRM safety and recovery", help="Query for Stage 2 planning")
     parser.add_argument("--governed-text", action="store_true", help="Enable Stage 2A governed text vertical slice")
     parser.add_argument("--governed-input", type=str, default="Summarize current objective and next safe action.", help="Input text for Stage 2A governed text request")
-    parser.add_argument("--inference-provider", type=str, default="mock_deterministic", help="Inference provider id for Stage 2A (mock_deterministic or ollama)")
+    parser.add_argument("--inference-provider", type=str, default="hrm_local", help="Inference provider id (hrm_local, mock_deterministic, or ollama)")
     parser.add_argument("--api-endpoint", type=str, default="status", help="Endpoint name for Stage 3 API verification")
     parser.add_argument("--api-payload", type=str, default='{"health": true}', help="JSON payload for Stage 3 API verification")
     parser.add_argument("--modality-query", type=str, default="Text", help="Optional text description for Stage 4 perception")
