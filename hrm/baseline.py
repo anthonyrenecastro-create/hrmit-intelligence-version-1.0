@@ -612,7 +612,7 @@ def make_simple_recurrent_params(key: jax.Array, shape: ShapeConfig) -> SimpleRe
 def run_simple_recurrent_baseline(hidden: jax.Array, inputs: Inputs, params: SimpleRecurrentParams, cfg: ExperimentConfig) -> jax.Array:
     def baseline_step(hidden_state: jax.Array, inp: tuple[jax.Array, jax.Array, jax.Array]):
         drive_t, target_t, _ = inp
-        drive_embed = jnp.mean(drive_t, axis=(1, 2, 3))
+        drive_embed = jnp.mean(drive_t, axis=(1, 2))
         hidden_state = jnp.tanh(jnp.einsum("bd,df->bf", drive_embed, params.W_input) + hidden_state @ params.W_hidden)
         output = hidden_state @ params.W_output
         prediction = jnp.tile(output[:, None, None, :], (1, cfg.shape.height, cfg.shape.width, 1))
