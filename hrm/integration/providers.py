@@ -202,7 +202,7 @@ def run_inference_sync(provider: InferenceProvider, request: InferenceRequest, c
 
 
 def _is_local_provider(provider_id: str) -> bool:
-    return provider_id.startswith("mock") or provider_id.startswith("ollama")
+    return provider_id.startswith("mock") or provider_id.startswith("ollama") or provider_id.startswith("hrm")
 
 
 def choose_provider(
