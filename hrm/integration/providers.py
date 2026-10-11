@@ -32,6 +32,7 @@ class ModelProfile:
 
 
 MODEL_PROFILES: dict[str, ModelProfile] = {
+    "hrm_local": ModelProfile(model_id="hrm_local", max_tokens=2048, local_only=True, supports_seed=True),
     "mock_deterministic": ModelProfile(model_id="mock_deterministic", max_tokens=4096, local_only=True, supports_seed=True),
     "llama3.1:8b": ModelProfile(model_id="llama3.1:8b", max_tokens=8192, local_only=True, supports_seed=True),
     "llama3.2:3b": ModelProfile(model_id="llama3.2:3b", max_tokens=8192, local_only=True, supports_seed=True),
