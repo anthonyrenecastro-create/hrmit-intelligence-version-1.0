@@ -29,16 +29,19 @@ class HRMCognitionText:
         self.eos_id = 256
         key = random.PRNGKey(seed)
         k1, k2, k3, k4 = random.split(key, 4)
+        def xavier(k, shape):
+            fan_in = shape[0]
+            return random.normal(k, shape, dtype=jnp.float32) * jnp.sqrt(1.0 / fan_in)
         # Byte embedding
-        self.embed = random.normal(k1, (vocab_size, cog_dim), dtype=jnp.float32) * 0.1
+        self.embed = xavier(k1, (vocab_size, cog_dim))
         # Gated recurrent cell (HRM-style): input, forget, and candidate gates
         # Input: [cog, embed] (2*cog_dim) -> 3*cog_dim (i, f, g)
-        self.W_gates = random.normal(k2, (cog_dim * 2, cog_dim * 3), dtype=jnp.float32) * 0.1
+        self.W_gates = xavier(k2, (cog_dim * 2, cog_dim * 3))
         self.b_gates = jnp.zeros((cog_dim * 3,), dtype=jnp.float32)
         # Hierarchy: slow context vector (like HRM's hierarchy)
-        self.W_hier = random.normal(k3, (cog_dim * 2, cog_dim), dtype=jnp.float32) * 0.1
+        self.W_hier = xavier(k3, (cog_dim * 2, cog_dim))
         # Output head
-        self.W_out = random.normal(k4, (cog_dim, vocab_size), dtype=jnp.float32) * 0.1
+        self.W_out = xavier(k4, (cog_dim, vocab_size))
 
     def _step(self, state, byte_id):
         cog, hier = state
