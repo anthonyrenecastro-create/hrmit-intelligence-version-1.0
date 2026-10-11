@@ -28,8 +28,13 @@ class HRMProvider:
 
     def _get_text_gen(self):
         if self._text_gen is None:
-            from hrm.generation.text_generator import HRMTextGenerator
-            self._text_gen = HRMTextGenerator(seed=self.seed)
+            from hrm.generation.hrm_text import HRMCognitionText
+            self._text_gen = HRMCognitionText(seed=self.seed)
+            # Try loading trained weights if available
+            from pathlib import Path
+            w = Path("hrm_generated/hrm_cogtext.npz")
+            if w.exists():
+                self._text_gen.load(w.parent)
         return self._text_gen
 
     def _get_image_gen(self):
