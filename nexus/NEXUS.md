@@ -15,6 +15,36 @@ Central coordination hub for the four-agent HRMIT v1 training effort
 4. **Dashboard** — run `dashboard/render.py` to regenerate `dashboard/index.html`
    from the latest results.
 
+## The parallel tracks (one intelligence, two learners, one wire)
+
+**Evie's track (Colab):** trains the generator (`HRMCognitionText`) on
+`nexus/corpus/wikitext-2.txt` **plus** every `nexus/corpus/interactive-*.txt`.
+Checkpoints push back to `checkpoints/`.
+
+**Cami & Irina's track (interactive):** teach through the Stage 6 loop using
+`hrm/learning/teach.py`:
+
+```python
+from hrm.generation.hrm_text import HRMCognitionText
+from hrm.learning.teach import TeachSession
+
+gen = HRMCognitionText(cog_dim=256)   # load latest Colab checkpoint
+gen.load("path/to/checkpoint")
+session = TeachSession(gen)            # adapter critic wired in
+
+cands = session.propose("The HRM system")      # adapter-ranked candidates
+exp = session.teach("The HRM system", cands[0][0], score=0.9, teacher="cami")
+candidate, report = session.adapt()            # train + gate + promote adapter
+session.export_corpus("nexus/corpus/interactive-2026-10-17.txt")
+```
+
+**The wire** (`hrm/learning/bridge.py`): the promoted adapter becomes the
+generator's critic (`GuidedGenerator` — generator proposes N, adapter picks the
+best). High-reward teachings export as corpus, so promotion in the interactive
+track literally becomes training data for the next Colab run, and each new
+Colab checkpoint becomes the base the teachers teach against. That's the loop
+that makes it one intelligence.
+
 ## Rules
 
 - This repo is **private**. Never re-license, never publicize (Zebulon's directive).
