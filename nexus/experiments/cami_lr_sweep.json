@@ -1,0 +1,9 @@
+{
+  "id": "cami_lr_sweep",
+  "agent": "Cami",
+  "description": "Learning-rate sensitivity — half the reference lr",
+  "model": {"vocab_size": 257, "cog_dim": 256, "seed": 0},
+  "training": {"epochs": 2000, "seq_len": 128, "lr": 0.005, "batch_size": 32, "seed": 2},
+  "corpus": "wikitext-2",
+  "status": "open"
+}

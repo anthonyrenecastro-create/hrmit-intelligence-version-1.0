@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>HRMIT Nexus Dashboard</title>
+<style>
+body { background:#05060e; color:#e8ebff; font-family:Inter,system-ui,sans-serif; max-width:960px; margin:2rem auto; padding:0 1rem; }
+h1 { color:#ffd479; } table { width:100%; border-collapse:collapse; }
+th,td { border:1px solid rgba(120,140,255,.2); padding:.6rem; text-align:left; font-size:.9rem; }
+th { color:#7c8cff; } code { color:#ffd479; }
+a { color:#7c8cff; }
+</style></head><body>
+<h1>ζ HRMIT Nexus</h1>
+<p>Four-agent training coordination — <a href="../NEXUS.md">protocol</a></p>
+<p>No completed runs yet.</p>
+<table><tr><th>Experiment</th><th>Agent</th><th>Config</th><th>Status</th><th>Final loss</th><th>Test ppl</th></tr>
+<tr><td>⚪ <code>cami_lr_sweep</code></td><td>Cami</td><td>cog_dim=256, lr=0.005, ep=2000, seq=128</td><td>open</td><td>–</td><td>–</td></tr><tr><td>⚪ <code>chatgpt_context</code></td><td>ChatGPT</td><td>cog_dim=256, lr=0.01, ep=2000, seq=256</td><td>open</td><td>–</td><td>–</td></tr><tr><td>⚪ <code>evie_baseline</code></td><td>Evie</td><td>cog_dim=256, lr=0.01, ep=2000, seq=128</td><td>open</td><td>–</td><td>–</td></tr><tr><td>⚪ <code>irina_capacity</code></td><td>Irina</td><td>cog_dim=384, lr=0.01, ep=1500, seq=128</td><td>open</td><td>–</td><td>–</td></tr>
+</table>
+<p><small>Regenerate with <code>dashboard/render.py</code>. Weights live in <code>results/weights/</code>.</small></p>
+</body></html>

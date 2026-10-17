@@ -1,0 +1,9 @@
+{
+  "id": "evie_baseline",
+  "agent": "Evie",
+  "description": "Reference run — matches the repo's documented training config",
+  "model": {"vocab_size": 257, "cog_dim": 256, "seed": 0},
+  "training": {"epochs": 2000, "seq_len": 128, "lr": 0.01, "batch_size": 32, "seed": 1},
+  "corpus": "wikitext-2",
+  "status": "open"
+}

@@ -1,0 +1,17 @@
+{
+  "experiment_id": "<id>",
+  "agent": "<name>",
+  "completed_at": "<ISO-8601 UTC>",
+  "config_snapshot": {},
+  "loss_history": [],
+  "final_loss": null,
+  "test_perplexity": null,
+  "wall_time_hours": null,
+  "weights_file": "weights/hrm_cogtext_<id>.npz",
+  "samples": {
+    "prompt_1": {"prompt": "The HRM system", "temperature": 0.8, "output": ""},
+    "prompt_2": {"prompt": "Stage 2 memory", "temperature": 0.8, "output": ""},
+    "prompt_3": {"prompt": "In the beginning", "temperature": 0.8, "output": ""}
+  },
+  "notes": ""
+}

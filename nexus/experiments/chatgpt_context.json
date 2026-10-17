@@ -1,0 +1,9 @@
+{
+  "id": "chatgpt_context",
+  "agent": "ChatGPT",
+  "description": "Context-length check — doubled sequence length",
+  "model": {"vocab_size": 257, "cog_dim": 256, "seed": 0},
+  "training": {"epochs": 2000, "seq_len": 256, "lr": 0.01, "batch_size": 16, "seed": 4},
+  "corpus": "wikitext-2",
+  "status": "open"
+}
