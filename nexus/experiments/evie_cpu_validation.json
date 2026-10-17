@@ -1,0 +1,9 @@
+{
+  "id": "evie_cpu_validation",
+  "agent": "Evie",
+  "description": "CPU validation run at reduced scale — proves the loop end-to-end before GPU",
+  "model": {"vocab_size": 257, "cog_dim": 128, "seed": 0},
+  "training": {"epochs": 500, "seq_len": 128, "lr": 0.01, "batch_size": 16, "seed": 1000},
+  "corpus": "wikitext-2",
+  "status": "claimed"
+}
